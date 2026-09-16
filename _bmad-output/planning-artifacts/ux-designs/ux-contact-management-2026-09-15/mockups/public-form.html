@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>טופס רישום ציבורי — סקיצה</title>
+<style>
+/* Illustrates: EXPERIENCE.md > Foundation (מובייל-first) + Component Patterns (Dropzone) + Key Flows > UJ-2 + Accessibility Floor (touch targets 44px). */
+:root{--primary:#1C5D8C;--accent:#B8791A;--rejected:#B3261E;--bg:#f0f2f5;--surface:#fff;--border:#e5e7eb;--text:#1f2430;--muted:#6b7280;--r-sm:6px;--r-md:10px;--r-lg:16px;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center;padding:30px 12px;}
+.phone{width:390px;max-width:100%;background:var(--surface);border-radius:28px;border:8px solid #1f2430;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.15);}
+.screen{padding:24px 20px 32px;}
+h1{font-size:19px;margin:0 0 6px;}
+.lead{font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 22px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px;}
+.field input{width:100%;padding:12px 12px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:15px;font-family:inherit;min-height:44px;}
+.dropzone{border:2px dashed var(--border);border-radius:var(--r-md);padding:22px 14px;text-align:center;color:var(--muted);font-size:13px;background:#fafbfc;}
+.dropzone .icon{font-size:26px;display:block;margin-bottom:8px;}
+.dropzone .filename{margin-top:10px;font-size:12px;font-weight:700;color:var(--text);background:#eef1f5;border-radius:8px;padding:6px 10px;display:inline-block;}
+.chk-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;margin:20px 0;background:#f6f7f9;border-radius:var(--r-sm);padding:12px;}
+.chk-row input{margin-top:3px;}
+.btn-submit{width:100%;background:var(--primary);color:#fff;border:none;border-radius:var(--r-md);padding:15px;font-size:15px;font-weight:800;min-height:48px;}
+.privacy{font-size:11px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.6;}
+.caption-note{text-align:center;font-size:11px;color:var(--muted);margin-top:16px;max-width:390px;}
+</style>
+</head>
+<body>
+<div>
+  <div class="phone">
+    <div class="screen">
+      <h1>רישום כאיש קשר לגוף נתמך</h1>
+      <p class="lead">הפרטים שתמלא/י ישמשו את הרכז/ת האחראי/ת ליצירת קשר בנוגע לפעילות הגוף הנתמך שלך. לא נדרשת הרשמה או התחברות למערכת.</p>
+
+      <div class="field"><label>שם מלא</label><input value="יוסי מזרחי"></div>
+      <div class="field"><label>תפקיד בגוף הנתמך</label><input value="מנהל כספים"></div>
+      <div class="field"><label>טלפון</label><input value="052-1234567"></div>
+      <div class="field"><label>דוא&quot;ל</label><input value="yossi@orlayeladim.org.il"></div>
+      <div class="field"><label>מספר ח&quot;פ / מזהה של הגוף הנתמך</label><input value="51-234567-8"></div>
+
+      <div class="field">
+        <label>מסמך המסמיך אותך לפעול בשם הגוף</label>
+        <div class="dropzone">
+          <span class="icon">📎</span>
+          גרור/י קובץ לכאן, או לחץ/י לבחירה
+          <div class="filename">✓ ייפוי_כח.pdf</div>
+        </div>
+      </div>
+
+      <div class="chk-row">
+        <input type="checkbox" checked>
+        <span>מאשר/ת שאינני רובוט</span>
+      </div>
+
+      <button class="btn-submit">שליחת בקשה</button>
+      <p class="privacy">המידע שנאסף ישמש לבדיקת הבקשה בלבד ויישמר במערכת הארגון בהתאם למדיניות הפרטיות שלו.</p>
+    </div>
+  </div>
+</div>
+<p class="caption-note">סקיצה סטטית · טופס רישום פומבי (מובייל) · FR-12–FR-15, FR-19 · UJ-2</p>
+</body>
+</html>

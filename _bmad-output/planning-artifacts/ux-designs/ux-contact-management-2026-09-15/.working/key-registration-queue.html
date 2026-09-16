@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>בקשות רישום — סקיצה</title>
+<style>
+/* Illustrates: EXPERIENCE.md > Component Patterns ("כרטיס בקשת רישום", Attention Card) + State Patterns ("התאמה לא נמצאה") + FR-16..FR-18. */
+:root{--primary:#1C5D8C;--accent:#B8791A;--active:#2F7D46;--rejected:#B3261E;--bg:#f8f9fb;--surface:#fff;--border:#e5e7eb;--text:#1f2430;--muted:#6b7280;--r-sm:4px;--r-md:8px;--r-lg:12px;--r-pill:999px;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);}
+.app-shell{display:flex;min-height:100vh;}
+.sidebar{width:220px;background:var(--surface);border-left:1px solid var(--border);padding:24px 16px;flex-shrink:0;}
+.brand{font-weight:800;font-size:18px;margin-bottom:24px;color:var(--primary);}
+.sidebar-nav a{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--r-md);color:#374151;text-decoration:none;font-weight:600;font-size:14px;margin-bottom:4px;}
+.sidebar-nav a.active{background:var(--primary);color:#fff;}
+.sidebar-nav a .count{background:var(--accent);color:#3D2A0A;border-radius:var(--r-pill);font-size:11px;font-weight:800;padding:1px 7px;}
+.main{flex:1;padding:32px 40px;max-width:760px;}
+h1.page-title{font-size:26px;font-weight:800;margin:0 0 20px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px 20px;margin-bottom:14px;}
+.card.flag{border-color:var(--accent);border-width:2px;background:#fffaf0;}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;}
+.name{font-weight:800;font-size:16px;}
+.sub{font-size:13px;color:var(--muted);margin-top:2px;}
+.tag-warn{display:inline-flex;align-items:center;gap:5px;background:var(--accent);color:#3D2A0A;border-radius:var(--r-pill);padding:3px 10px;font-size:11px;font-weight:800;margin-bottom:6px;}
+.doc-link{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--primary);margin-top:8px;text-decoration:none;}
+.date{font-size:12px;color:var(--muted);}
+.actions{display:flex;gap:8px;margin-top:14px;}
+.btn{border:none;border-radius:var(--r-md);padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;}
+.btn-approve{background:var(--active);color:#fff;}
+.btn-reject{background:#fff;border:1px solid var(--rejected);color:var(--rejected);}
+.btn-more{background:#fff;border:1px solid var(--border);color:var(--text);}
+.caption-note{position:fixed;bottom:12px;left:12px;background:#111827;color:#fff;font-size:11px;padding:6px 10px;border-radius:6px;opacity:.85;}
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar">
+    <div class="brand">ניהול קשר · גופים נתמכים</div>
+    <div class="sidebar-nav">
+      <a href="#">גופים נתמכים</a>
+      <a href="#">אנשי קשר</a>
+      <a href="#" class="active">בקשות רישום <span class="count">3</span></a>
+      <a href="#">תחומים</a>
+    </div>
+  </div>
+  <div class="main">
+    <h1 class="page-title">בקשות רישום ממתינות</h1>
+
+    <div class="card flag">
+      <span class="tag-warn">⚠ לא זוהה גוף נתמך</span>
+      <div class="card-top">
+        <div>
+          <div class="name">שרה לוינסון</div>
+          <div class="sub">רכזת קהילה · ח&quot;פ שהוזן: 51-555000-9 (אינו תואם גוף קיים)</div>
+        </div>
+        <div class="date">הוגשה 14/09/2026</div>
+      </div>
+      <a class="doc-link" href="#">📎 מסמך_הסמכה.pdf</a>
+      <div class="actions">
+        <button class="btn btn-approve">שייך לגוף קיים…</button>
+        <button class="btn btn-more">צור גוף נתמך חדש</button>
+        <button class="btn btn-reject">דחה</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top">
+        <div>
+          <div class="name">יוסי מזרחי</div>
+          <div class="sub">מנהל כספים · עמותת אור לילדים (זוהה אוטומטית לפי ח&quot;פ)</div>
+        </div>
+        <div class="date">הוגשה 15/09/2026</div>
+      </div>
+      <a class="doc-link" href="#">📎 ייפוי_כח.pdf</a>
+      <div class="actions">
+        <button class="btn btn-approve">אשר</button>
+        <button class="btn btn-more">בקש השלמת מסמכים</button>
+        <button class="btn btn-reject">דחה</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top">
+        <div>
+          <div class="name">רונית שגיא</div>
+          <div class="sub">רכזת תוכניות · מרכז קהילתי הגליל (זוהה אוטומטית לפי ח&quot;פ)</div>
+        </div>
+        <div class="date">הוגשה 13/09/2026</div>
+      </div>
+      <a class="doc-link" href="#">📎 אישור_מינוי.pdf</a>
+      <div class="actions">
+        <button class="btn btn-approve">אשר</button>
+        <button class="btn btn-more">בקש השלמת מסמכים</button>
+        <button class="btn btn-reject">דחה</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="caption-note">סקיצה סטטית · תור בקשות רישום · FR-14, FR-16, FR-17</div>
+</body>
+</html>

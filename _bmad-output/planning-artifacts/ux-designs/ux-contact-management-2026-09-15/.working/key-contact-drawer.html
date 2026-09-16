@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>איש קשר — עריכה — סקיצה</title>
+<style>
+/* Illustrates: EXPERIENCE.md > Component Patterns ("טופס עריכת איש קשר", "סמן כלא פעיל") + State Patterns (שמירה מושבתת, מודל אישור).
+   Two states shown: (A) the edit Drawer at rest, (B) the "mark inactive" Modal stacked above it — the load-bearing alternate state. */
+:root{--primary:#1C5D8C;--accent:#B8791A;--active:#2F7D46;--inactive:#6B7280;--rejected:#B3261E;--bg:#f8f9fb;--surface:#fff;--border:#e5e7eb;--text:#1f2430;--muted:#6b7280;--r-sm:4px;--r-md:8px;--r-lg:12px;--r-pill:999px;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#eef1f5;color:var(--text);}
+.wrap{display:flex;gap:24px;padding:32px;flex-wrap:wrap;}
+.frame{position:relative;width:460px;height:640px;background:#dfe4ea;border-radius:10px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.08);}
+.frame-label{position:absolute;top:-26px;right:0;font-size:12px;font-weight:800;color:var(--muted);}
+.dim{position:absolute;inset:0;background:rgba(15,23,42,.35);}
+.drawer{position:absolute;top:0;left:0;height:100%;width:400px;background:#fff;box-shadow:8px 0 20px rgba(0,0,0,.12);padding:24px;overflow-y:auto;}
+.drawer h2{margin:0 0 18px;font-size:18px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px;}
+.field input,.field select{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-family:inherit;}
+.field .error{font-size:11px;color:var(--rejected);margin-top:4px;font-weight:700;}
+.field .hint{font-size:11px;color:var(--muted);margin-top:4px;}
+.tags{display:flex;gap:6px;flex-wrap:wrap;}
+.tag{background:#eef1f5;border-radius:var(--r-pill);padding:4px 10px;font-size:12px;font-weight:700;}
+.chk-row{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;}
+.divider{border-top:1px solid var(--border);margin:18px 0;}
+.link-danger{color:var(--rejected);font-weight:700;font-size:13px;background:none;border:none;cursor:pointer;padding:0;}
+.footer-btns{display:flex;gap:10px;margin-top:20px;}
+.btn{border:none;border-radius:var(--r-md);padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary.disabled{background:#c7d3dd;cursor:not-allowed;}
+.btn-outline{background:#fff;border:1px solid var(--border);}
+.modal-overlay{position:absolute;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;}
+.modal{background:#fff;border-radius:var(--r-lg);padding:22px;width:320px;}
+.modal h3{margin:0 0 6px;font-size:16px;}
+.modal p{font-size:12px;color:var(--muted);margin:0 0 16px;}
+.caption-note{margin-top:34px;font-size:11px;color:var(--muted);text-align:center;max-width:400px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <div class="frame-label">מצב A — עריכת איש קשר (Drawer)</div>
+    <div class="frame">
+      <div class="dim"></div>
+      <div class="drawer">
+        <h2>עריכת איש קשר</h2>
+        <div class="field"><label>שם מלא</label><input value="יוסי מזרחי"></div>
+        <div class="field"><label>תפקיד</label><input value="מנהל כספים"></div>
+        <div class="field"><label>טלפון</label><input value="052-1234567"></div>
+        <div class="field"><label>דוא&quot;ל</label><input value="yossi@orlayeladim" style="border-color:var(--rejected);">
+          <div class="error">כתובת הדוא&quot;ל אינה בפורמט תקין</div>
+        </div>
+        <div class="field"><label>גופים נתמכים משויכים</label><div class="tags"><span class="tag">עמותת אור לילדים ✕</span></div></div>
+        <div class="field"><label>תחום</label><select><option selected>חינוך</option></select></div>
+        <div class="chk-row"><input type="checkbox" checked><span>מעוניין בהודעות דוא&quot;ל</span></div>
+        <div class="chk-row"><input type="checkbox" checked><span>מעוניין בהודעות SMS</span></div>
+        <div class="field"><label>הערות</label><input value=""></div>
+        <div class="divider"></div>
+        <button class="link-danger">סמן כלא פעיל…</button>
+        <div class="footer-btns">
+          <button class="btn btn-primary disabled">שמירה</button>
+          <button class="btn btn-outline">ביטול</button>
+        </div>
+      </div>
+    </div>
+    <p class="caption-note">כפתור "שמירה" מושבת כל עוד שדה הדוא&quot;ל לא תקין — ולידציה בזמן אמת, לא רק בשליחה.</p>
+  </div>
+
+  <div>
+    <div class="frame-label">מצב B — אישור "סמן כלא פעיל" (Modal מעל ה-Drawer)</div>
+    <div class="frame">
+      <div class="dim"></div>
+      <div class="drawer" style="filter:blur(1px);"></div>
+      <div class="modal-overlay">
+        <div class="modal">
+          <h3>סימון רותי אברהם כלא פעיל</h3>
+          <p>פעולה זו לא מוחקת את הרשומה — היא נשמרת להיסטוריה.</p>
+          <div class="field"><label>מקור הבקשה</label>
+            <select><option selected>טלפון</option><option>דוא&quot;ל</option><option>אחר</option></select>
+          </div>
+          <div class="field"><label>תאריך</label><input value="15/09/2026"></div>
+          <div class="footer-btns">
+            <button class="btn btn-primary">אישור וסימון</button>
+            <button class="btn btn-outline">ביטול</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption-note">FR-9 — מקור ותאריך הם שדות חובה; אין "סימון מיידי" בלי תיעוד.</p>
+  </div>
+</div>
+</body>
+</html>

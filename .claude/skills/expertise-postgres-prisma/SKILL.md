@@ -44,6 +44,7 @@ model Domain {
   updatedAt DateTime @updatedAt
 
   supportedBodies SupportedBody[]
+  contacts        Contact[]
 }
 ```
 
@@ -61,8 +62,9 @@ model SupportedBody {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  domain   Domain                   @relation(fields: [domainId], references: [id])
-  contacts ContactOnSupportedBody[]
+  domain               Domain                   @relation(fields: [domainId], references: [id])
+  contacts             ContactOnSupportedBody[]
+  registrationRequests RegistrationRequest[]
 
   @@index([domainId])
 }
@@ -72,7 +74,7 @@ model SupportedBody {
 
 ### Contact — soft delete, many-to-many with SupportedBody
 
-Use an explicit status enum, not a boolean, so the model can grow (e.g. `PENDING`, `ARCHIVED`) without another migration:
+Use an explicit status enum, not a boolean, so the model can grow (e.g. a future `PENDING` state) without another migration:
 
 ```prisma
 enum ContactStatus {
@@ -80,19 +82,36 @@ enum ContactStatus {
   INACTIVE
 }
 
-model Contact {
-  id            String        @id @default(cuid())
-  fullName      String        @map("full_name")
-  email         String?
-  phone         String?
-  status        ContactStatus @default(ACTIVE)
-  deactivatedAt DateTime?     @map("deactivated_at")
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+// FR-9: which channel an out-of-system update/removal request came in on.
+enum ExternalRequestSource {
+  PHONE
+  EMAIL
+  OTHER
+}
 
+model Contact {
+  id         String        @id @default(cuid())
+  fullName   String        @map("full_name")
+  role       String?
+  emails     String[]      @default([]) // FR-10: more than one address is supported per contact
+  phone      String?
+  notes      String?
+  emailOptIn Boolean       @default(false) @map("email_opt_in")
+  smsOptIn   Boolean       @default(false) @map("sms_opt_in")
+  domainId   String?       @map("domain_id") // FR-7: direct domain/department assignment, independent of any linked SupportedBody's own domain
+  status     ContactStatus @default(ACTIVE)
+  deactivatedAt DateTime?  @map("deactivated_at")
+  // FR-9: required together whenever the status change came from outside the app (phone/email) rather than the UI itself.
+  externalRequestSource ExternalRequestSource? @map("external_request_source")
+  externalRequestDate   DateTime?              @map("external_request_date")
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  domain          Domain?                   @relation(fields: [domainId], references: [id])
   supportedBodies ContactOnSupportedBody[]
 
   @@index([status])
+  @@index([domainId])
 }
 
 // Explicit join model, not an implicit m2m: this project will want columns on
@@ -126,14 +145,20 @@ enum RegistrationRequestStatus {
 }
 
 model RegistrationRequest {
-  id           String                    @id @default(cuid())
-  payload      Json                      // the submitted form, kept verbatim for audit
-  status       RegistrationRequestStatus @default(PENDING)
-  reviewedById String?                   @map("reviewed_by_id")
-  reviewedAt   DateTime?                 @map("reviewed_at")
-  createdAt    DateTime                  @default(now())
+  id              String                    @id @default(cuid())
+  payload         Json                      // the submitted form, kept verbatim for audit
+  status          RegistrationRequestStatus @default(PENDING)
+  supportedBodyId String?                   @map("supported_body_id") // nullable until FR-14's ח"פ match resolves it (or a coordinator assigns/creates one)
+  reason          String?                   // set on reject, FR-16
+  infoRequestedAt DateTime?                 @map("info_requested_at") // FR-16's "request completion" action — status stays PENDING, submitter is re-notified per FR-18
+  reviewedById    String?                   @map("reviewed_by_id")
+  reviewedAt      DateTime?                 @map("reviewed_at")
+  createdAt       DateTime                  @default(now())
+
+  supportedBody SupportedBody? @relation(fields: [supportedBodyId], references: [id])
 
   @@index([status])
+  @@index([supportedBodyId])
 }
 ```
 
@@ -175,7 +200,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 export const auditContext = new AsyncLocalStorage<{ userId: string }>();
 
-// call once per incoming request, wrapping the handler:
+// call once per incoming request, wrapping the handler. `currentUser` comes from
+// the Auth.js (AD-9) session resolved in proxy.ts — this file only consumes it,
+// it doesn't establish the session itself:
 // auditContext.run({ userId: currentUser.id }, () => handler(req, res));
 ```
 
@@ -261,7 +288,7 @@ await prisma.$transaction(async (tx) => {
 
 If a bulk (`updateMany`/`deleteMany`) call ever needs true row-level audit despite Prisma not returning affected rows for those operations, loop single `update`s inside a `$transaction` instead of calling the bulk method on an audited model — don't silently accept unaudited bulk writes.
 
-**If this project ever needs audit integrity that survives even a raw `psql` write bypassing the app entirely** (a stronger guarantee than anything above, and stronger than this MVP's actual requirement — NFR-3 is an accountability log for actions taken *through* the app): a PostgreSQL `AFTER INSERT/UPDATE/DELETE` trigger is atomic by construction at the DB layer, with "who" carried via a session variable (`SET LOCAL app.current_user_id = '...'`) read through `current_setting(...)` in the trigger. That's a heavier, PL/pgSQL-based alternative to the extension above, not a default — don't build it speculatively now.
+**If this project ever needs audit integrity that survives even a raw `psql` write bypassing the app entirely** (a stronger guarantee than anything above, and stronger than this MVP's actual requirement — NFR-B is an accountability log for actions taken *through* the app): a PostgreSQL `AFTER INSERT/UPDATE/DELETE` trigger is atomic by construction at the DB layer, with "who" carried via a session variable (`SET LOCAL app.current_user_id = '...'`) read through `current_setting(...)` in the trigger. That's a heavier, PL/pgSQL-based alternative to the extension above, not a default — don't build it speculatively now.
 
 Other caveats to preserve:
 - `updateMany`/`deleteMany` don't return affected rows, so `$allOperations` can't give a clean per-row before/after for them. Per model, either (a) forbid bulk ops on audited models and require callers to loop single `update`s inside an explicit `$transaction`, or (b) `findMany` with the same `where` immediately before the bulk op to snapshot affected rows. Never silently skip audit rows for bulk operations — decide explicitly.
@@ -290,10 +317,11 @@ export function scopeSupportedBody<T extends { where?: Prisma.SupportedBodyWhere
   return { ...args, where: { ...(args.where ?? {}), domainId } };
 }
 
-// Contact has NO direct domainId — it only reaches a domain via
-// ContactOnSupportedBody -> SupportedBody.domainId. A flat `where: { domainId }`
-// on Contact would silently match nothing (wrong field) or throw (unknown field) —
-// don't copy the SupportedBody shape here.
+// Contact reaches a domain two ways: its own direct `domainId` (FR-7) and,
+// indirectly, via ContactOnSupportedBody -> SupportedBody.domainId. Scope on
+// either path — a flat `where: { domainId }` alone would miss contacts that
+// are only reachable through a SupportedBody, so don't copy the
+// SupportedBody shape here.
 export function scopeContact<T extends { where?: Prisma.ContactWhereInput }>(
   args: T,
   domainId: string,
@@ -302,7 +330,7 @@ export function scopeContact<T extends { where?: Prisma.ContactWhereInput }>(
     ...args,
     where: {
       ...(args.where ?? {}),
-      supportedBodies: { some: { supportedBody: { domainId } } },
+      OR: [{ domainId }, { supportedBodies: { some: { supportedBody: { domainId } } } }],
     },
   };
 }
@@ -321,7 +349,7 @@ Universal principles (simplicity, naming, DRY) are in `expertise-code-quality` �
 - **Avoid N+1 queries.** Never loop over a list calling `prisma.x.findUnique`/`findFirst` once per item (e.g. resolving each contact's supported bodies one at a time when rendering the contacts list). Use a nested `include`/`select` on the parent query, or one batched `findMany({ where: { id: { in: [...] } } })`. This is the single most common real-world Prisma performance mistake, and it hits directly on this app's list screens (contacts, supported bodies).
 - **Select only the fields the screen needs.** Default to an explicit `select` (or `include` with a nested `select`) instead of always fetching full records — a list view rendering three columns shouldn't pull every column of `Contact`/`SupportedBody`. Fetch the full record only where the caller actually needs it (e.g. an edit form).
 - **Wrap genuinely multi-step writes in `$transaction`.** Anything that changes more than one row and must not partially succeed belongs in `prisma.$transaction([...])` (or the interactive callback form) — not two independent `await`s. Concrete case in this app: approving a `RegistrationRequest` both creates/updates a `Contact` and sets the request's `status` to `APPROVED`; if the second write fails after the first succeeds, the app is left with a live `Contact` and a request permanently stuck at `PENDING`.
-- **Index check (verified against the schema above):** `SupportedBody.domainId` (`@@index`), `SupportedBody.companyId` (`@unique`), and `Contact.status` (`@@index`) are already covered — no missing index found. Re-run this check whenever a new column gets filtered or sorted on frequently; a query that scans a growing table without an index is a bug that only shows up after the data grows.
+- **Index check (verified against the schema above):** `SupportedBody.domainId` (`@@index`), `SupportedBody.companyId` (`@unique`), `Contact.status` (`@@index`), `Contact.domainId` (`@@index`), and `RegistrationRequest.supportedBodyId` (`@@index`) are already covered — no missing index found. Re-run this check whenever a new column gets filtered or sorted on frequently; a query that scans a growing table without an index is a bug that only shows up after the data grows.
 
 ---
 

@@ -41,7 +41,7 @@ This repo is greenfield — no `apps/`/`packages/` directories exist yet, so the
 - *Project rule:* use `unknown` at trust boundaries (parsed JSON, request bodies, external API responses) and narrow explicitly — never `any` as a shortcut, never a file-level `@ts-nocheck` to unblock a PR. A narrowly-scoped `@ts-expect-error` with a comment is acceptable for a genuine library gap.
 - *Project rule:* don't use TS `enum` or `namespace` (both are non-erasable and complicate type-stripping/interop) — use `as const` object literals + derived unions:
   ```ts
-  export const ContactStatus = { ACTIVE: "ACTIVE", ARCHIVED: "ARCHIVED" } as const;
+  export const ContactStatus = { ACTIVE: "ACTIVE", INACTIVE: "INACTIVE" } as const;
   export type ContactStatus = (typeof ContactStatus)[keyof typeof ContactStatus];
   ```
 
@@ -51,14 +51,14 @@ This repo is greenfield — no `apps/`/`packages/` directories exist yet, so the
 
 This project deliberately uses **Joi, not Zod** — so, unlike a Zod setup where the schema *is* the type, the TS type and the Joi schema are two separate, hand-maintained artifacts that can silently drift (a field added to one and not the other). Structure this explicitly:
 
-- *Project rule:* colocate per resource, e.g. `src/features/contacts/`: `types.ts` (hand-written DTOs — request/response shapes, structurally aligned with the Prisma model where they overlap) and `schema.ts` (Joi schema per operation shape: `createContactSchema`, `updateContactSchema`, …).
+- *Project rule:* colocate per resource at `packages/shared-schemas/<resource>/` (e.g. `packages/shared-schemas/contacts/`) — not inside `apps/internal` — since both the Presentation layer (React Hook Form) and the API layer (Route Handler validation) must import the same pair (see `expertise-code-quality`'s Project Structure section): `types.ts` (hand-written DTOs — request/response shapes, structurally aligned with the Prisma model where they overlap) and `schema.ts` (Joi schema per operation shape: `createContactSchema`, `updateContactSchema`, …).
 - *Recommendation:* force a compile-time drift check between them, e.g.:
   ```ts
   // schema.ts — Record<keyof T, Joi.Schema> fails to compile if a field is
   // added to/removed from CreateContactInput without updating the schema.
   export const createContactSchema: Record<keyof CreateContactInput, Joi.Schema> = {
     fullName: Joi.string().trim().min(1).max(200).required(),
-    email: Joi.string().trim().email().required(),
+    emails: Joi.array().items(Joi.string().trim().email()).min(1).required(), // Contact.emails is a list — see expertise-postgres-prisma
     notes: Joi.string().trim().max(2000).optional(),
   };
   ```

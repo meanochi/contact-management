@@ -56,11 +56,13 @@ Ask: **does this action have its own lifecycle, side effects, or a rejection rea
 - **Yes → verb-shaped `POST` sub-route.** Example — approve/reject a registration request has side effects (creates Contact/SupportedBody records, is a one-way state transition, guarded by business rules like "can't approve twice"):
   - `POST /api/registration-requests/:id/approve` → `200` + updated request (and/or created Contact); `409 Conflict` if not currently `PENDING`.
   - `POST /api/registration-requests/:id/reject` with `{ reason: string }` → same status-code rules.
+  - `POST /api/registration-requests/:id/request-info` (FR-16's third action, "request completion") → `200` + updated request; sets `infoRequestedAt` and re-notifies the submitter (FR-18) — status stays `PENDING`, this isn't a terminal transition.
+  - `POST /api/registration-requests/:id/assign-body` with `{ supportedBodyId }` → `200` + updated request; covers the unmatched-ח"פ edge case (FR-14/FR-15), where a coordinator/admin either picks an existing `SupportedBody` or first `POST`s a new one via the plain CRUD route and then calls this with its id.
   - `POST`, not `PUT`, because a second call is a conflict, not an idempotent no-op.
-- **No → it's really just a field or relationship change** → `PATCH` on the resource, or `PUT`/`DELETE` on a small sub-resource. Example — assigning a coordinator to a domain is pure relationship-setting (validate the coordinator exists and has the right role, nothing more) and genuinely idempotent:
-  - `PUT /api/domains/:id/coordinator` `{ coordinatorId }` → `200` + updated domain. Calling it again with the same id is a no-op returning the same result.
-  - `DELETE /api/domains/:id/coordinator` → unassign, `200` + updated domain (not `204`).
-  - Don't fold this into `PATCH /api/domains/:id { coordinatorId }` — that forces the generic domain `PATCH` to special-case authorization for one field ("only an admin may reassign a coordinator" vs. "a coordinator may edit their own domain's name"). A dedicated sub-resource route keeps that explicit instead of hidden inside a conditional.
+- **No → it's really just a field or relationship change** → `PATCH` on the resource, or `PUT`/`DELETE` on a small sub-resource. Example — assigning a coordinator to a domain is relationship-setting (validate the coordinator exists and has the right role, nothing more) and idempotent. A domain can have more than one coordinator (FR-2), so this is a sub-collection, not a single field:
+  - `PUT /api/domains/:id/coordinators/:coordinatorId` → assign, `200` + updated domain. Calling it again with the same id is a no-op returning the same result.
+  - `DELETE /api/domains/:id/coordinators/:coordinatorId` → unassign that one coordinator, `200` + updated domain (not `204`).
+  - Don't fold this into `PATCH /api/domains/:id { coordinatorId }` — that forces the generic domain `PATCH` to special-case authorization for one field ("only an admin may reassign a coordinator" vs. "a coordinator may edit their own domain's name"), and can't express more than one coordinator anyway. A dedicated sub-resource route keeps that explicit instead of hidden inside a conditional.
 
 Apply this same test before inventing any new action-endpoint pattern — don't add a third shape without a reason.
 
@@ -154,7 +156,7 @@ Error:
 ```
 
 - `error.details[].field`/`.message` maps directly onto RHF's `setError(field, { message })`. `error.code` is a stable discriminant for RTK Query (`VALIDATION_ERROR`, `NOT_FOUND`, `FORBIDDEN`, `CONFLICT`, `RATE_LIMITED`, `INTERNAL_ERROR`, …) without parsing free-text messages.
-- Status codes: `200` read/update success, `201` create, `400` validation failure, `401` unauthenticated, `403` authenticated-but-forbidden (domain-scoped), `404` not found, `409` conflict (e.g. approving an already-approved request), `429` rate-limited, `500` unhandled/internal.
+- Status codes: `200` read/update success, `201` create, `400` validation failure, `401` unauthenticated, `403` authenticated-but-forbidden (role-based, e.g. a non-admin calling an admin-only action), `404` not found — including a record that exists but is outside the caller's domain (EXPERIENCE.md: domain-scoped denial is always `404`, never `403`, so it doesn't reveal whether the record exists), `409` conflict (e.g. approving an already-approved request), `429` rate-limited, `500` unhandled/internal.
 - Wrap handler bodies (or add a `withErrorBoundary` HOF alongside the validation one) so an uncaught exception never reaches the client as a raw 500 HTML page — it should always come back as `errorResponse(500, "INTERNAL_ERROR", "Something went wrong")`, with the real error logged server-side only.
 - **Recommendation, not adopted now:** RFC 9457 Problem Details is the current IETF-standard error shape. This app's custom envelope is purpose-built for RHF/RTK Query instead, which Problem Details doesn't give you for free. If this API ever needs to interoperate with external Problem-Details-aware tooling, that's a thin mapping layer (`code`→`type`, `message`→`title`/`detail`), not a redesign — don't adopt it speculatively now.
 

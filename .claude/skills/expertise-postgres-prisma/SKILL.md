@@ -19,7 +19,8 @@ description: 'PostgreSQL/Prisma schema and query conventions for this project: s
 
 1. **Contact is soft-delete only.** Never call `prisma.contact.delete()`. See "Soft delete rules" below.
 2. **Audit trail is automatic via Client Extensions (`$extends`), one extended client, applied once, writing through `Prisma.getExtensionContext(this)` so each audit row shares its mutation's transaction.** A mutation spanning more than one model (e.g. approving a registration) still needs an explicit `prisma.$transaction(async (tx) => ...)` at the call site — the extension makes each write's *own* audit row atomic with it, it doesn't group unrelated writes together. `$use` isn't available on this project's Prisma version. See "Audit trail" below.
-3. **Domain-scoped queries go through that model's own named `scopeX` helper** (`scopeContact`, `scopeSupportedBody`, …) — never an ad hoc inline `where: { domainId }` copy-pasted between models that don't reach their domain the same way. This is the Prisma-layer implication of the project's centralized-middleware permission architecture (`proxy.ts`); that architectural choice itself is decided elsewhere (see `expertise-api-rest` §1) and is not re-argued here.
+3. **Domain-scoped queries go through that model's own named `scopeX` helper** (`scopeContact`, `scopeSupportedBody`, …) — never an ad hoc inline `where: { domainId }` copy-pasted between models that don't reach their domain the same way. This is the Prisma-layer implication of the project's centralized-Guard permission architecture in `apps/api` (a global NestJS Guard, `ARCHITECTURE-SPINE.md` AD-4); that architectural choice itself is decided elsewhere (see `expertise-api-rest`) and is not re-argued here.
+4. **Raw SQL only via tagged templates, never string concatenation.** Any `$queryRaw`/`$executeRaw` usage must use the tagged-template form — never `$queryRawUnsafe`/`$executeRawUnsafe` with a value traced back to user input. See "Raw SQL safety" below.
 
 **Recommendations — current best practice, apply judgment:**
 
@@ -43,36 +44,51 @@ model Domain {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  supportedBodies SupportedBody[]
-  contacts        Contact[]
+  supportedBodies SupportedBodyOnDomain[]
 }
 ```
 
-Use `isActive` to soft-disable. Never delete a `Domain` referenced by historical `Contact`/`SupportedBody` rows — same reasoning as the Contact soft-delete rule below.
+Use `isActive` to soft-disable. Never delete a `Domain` referenced by historical `SupportedBody` rows — same reasoning as the Contact soft-delete rule below.
 
-### SupportedBody (גוף נתמך) — unique company id
+**Contact has no relation to `Domain` at all.** A contact's domain is reached only transitively, through the `SupportedBody`/`SupportedBody`s it's linked to — see "Contact" below.
+
+### SupportedBody (גוף נתמך) — unique company id, many-to-many with Domain
+
+A `SupportedBody` can belong to more than one domain (product decision) — model it as an explicit join, not a flat `domainId` column:
 
 ```prisma
 model SupportedBody {
   id        String   @id @default(cuid())
   companyId String   @unique @map("company_id") // ח"פ
   name      String
-  domainId  String   @map("domain_id")
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  domain               Domain                   @relation(fields: [domainId], references: [id])
+  domains              SupportedBodyOnDomain[]
   contacts             ContactOnSupportedBody[]
   registrationRequests RegistrationRequest[]
+}
 
+// Explicit join model, not an implicit m2m: a SupportedBody can be linked to
+// more than one Domain, chosen from the existing Domain lookup table when the
+// SupportedBody is created/edited.
+model SupportedBodyOnDomain {
+  supportedBodyId String   @map("supported_body_id")
+  domainId        String   @map("domain_id")
+  createdAt       DateTime @default(now())
+
+  supportedBody SupportedBody @relation(fields: [supportedBodyId], references: [id])
+  domain        Domain        @relation(fields: [domainId], references: [id])
+
+  @@id([supportedBodyId, domainId])
   @@index([domainId])
 }
 ```
 
 `companyId` (ח"פ) is the natural business key — enforce uniqueness with `@unique` at the DB level, not only in application code. A bulk import or a second entry point can race past an app-level check; a DB constraint can't be raced past.
 
-### Contact — soft delete, many-to-many with SupportedBody
+### Contact — soft delete, many-to-many with SupportedBody, no direct Domain field
 
 Use an explicit status enum, not a boolean, so the model can grow (e.g. a future `PENDING` state) without another migration:
 
@@ -98,7 +114,6 @@ model Contact {
   notes      String?
   emailOptIn Boolean       @default(false) @map("email_opt_in")
   smsOptIn   Boolean       @default(false) @map("sms_opt_in")
-  domainId   String?       @map("domain_id") // FR-7: direct domain/department assignment, independent of any linked SupportedBody's own domain
   status     ContactStatus @default(ACTIVE)
   deactivatedAt DateTime?  @map("deactivated_at")
   // FR-9: required together whenever the status change came from outside the app (phone/email) rather than the UI itself.
@@ -107,11 +122,12 @@ model Contact {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  domain          Domain?                   @relation(fields: [domainId], references: [id])
+  // No direct domainId: a Contact's domain(s) are reached only through the
+  // SupportedBody/SupportedBodies it's linked to (product decision — a
+  // contact belongs to a body, which already carries its own domain(s)).
   supportedBodies ContactOnSupportedBody[]
 
   @@index([status])
-  @@index([domainId])
 }
 
 // Explicit join model, not an implicit m2m: this project will want columns on
@@ -200,10 +216,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 export const auditContext = new AsyncLocalStorage<{ userId: string }>();
 
-// call once per incoming request, wrapping the handler. `currentUser` comes from
-// the Auth.js (AD-9) session resolved in proxy.ts — this file only consumes it,
+// call once per incoming request, wrapping the handler. In apps/api (NestJS), the
+// natural place to run this is a global Interceptor or middleware in main.ts, wrapping
+// the request in auditContext.run(...) before it reaches any controller — `currentUser`
+// comes from whatever auth mechanism AD-9 lands on (still undecided — see
+// ARCHITECTURE-SPINE.md AD-9/Deferred); this file only consumes the resolved user,
 // it doesn't establish the session itself:
-// auditContext.run({ userId: currentUser.id }, () => handler(req, res));
+// auditContext.run({ userId: currentUser.id }, () => next());
 ```
 
 ```ts
@@ -299,29 +318,30 @@ Other caveats to preserve:
 
 ## Domain-scoped filtering (mandatory — Prisma-layer implication only)
 
-The architecture decision — centralized permission enforcement in `proxy.ts`, not per-endpoint checks and not Postgres RLS — is made elsewhere (see the architecture doc and `expertise-api-rest` §1); this skill doesn't re-argue it, only implements its data-layer consequence.
+The architecture decision — centralized permission enforcement via a global NestJS Guard in `apps/api`, not per-endpoint checks and not Postgres RLS — is made elsewhere (see the architecture doc's AD-4 and `expertise-api-rest`); this skill doesn't re-argue it, only implements its data-layer consequence.
 
 **Rule:** every read/write against a domain-scoped model must go through one shared, **named-per-model** helper that injects the domain filter from the authenticated request's context — never a hand-rolled inline filter in a repository function. Wire it as a sibling to the audit extension, sharing the same `AsyncLocalStorage` context (extend it with `domainId` alongside `userId`).
 
-**There is no single generic filter shape — `domainId` isn't the same kind of field on every scoped model, per the schema above:**
+**There is no single generic filter shape — `domainId` isn't reached the same way on every scoped model, per the schema above:**
 
 ```ts
 // packages/db/src/domain-scope.ts
 import type { Prisma } from "./generated/prisma";
 
-// SupportedBody has domainId directly — a flat filter.
+// SupportedBody reaches its domain(s) through the SupportedBodyOnDomain join
+// (many-to-many) — filter via that relation, not a flat `where: { domainId }`.
 export function scopeSupportedBody<T extends { where?: Prisma.SupportedBodyWhereInput }>(
   args: T,
   domainId: string,
 ): T {
-  return { ...args, where: { ...(args.where ?? {}), domainId } };
+  return {
+    ...args,
+    where: { ...(args.where ?? {}), domains: { some: { domainId } } },
+  };
 }
 
-// Contact reaches a domain two ways: its own direct `domainId` (FR-7) and,
-// indirectly, via ContactOnSupportedBody -> SupportedBody.domainId. Scope on
-// either path — a flat `where: { domainId }` alone would miss contacts that
-// are only reachable through a SupportedBody, so don't copy the
-// SupportedBody shape here.
+// Contact has no direct domainId — it reaches a domain only indirectly, via
+// ContactOnSupportedBody -> SupportedBodyOnDomain. Scope through that path only.
 export function scopeContact<T extends { where?: Prisma.ContactWhereInput }>(
   args: T,
   domainId: string,
@@ -330,7 +350,7 @@ export function scopeContact<T extends { where?: Prisma.ContactWhereInput }>(
     ...args,
     where: {
       ...(args.where ?? {}),
-      OR: [{ domainId }, { supportedBodies: { some: { supportedBody: { domainId } } } }],
+      supportedBodies: { some: { supportedBody: { domains: { some: { domainId } } } } },
     },
   };
 }
@@ -342,6 +362,16 @@ Revisit the RLS-vs-middleware decision only if a second direct DB consumer appea
 
 ---
 
+## Raw SQL safety (mandatory)
+
+Every query written through Prisma's normal query API (`findMany`, `update`, `create`, …) is already parameterized — Prisma builds these as parameterized SQL under the hood, so standard usage is safe against SQL injection by default. This section only applies where the project already anticipates dropping to raw SQL (the partial index migration above, a future PL/pgSQL trigger, or any ad hoc `$queryRaw`/`$executeRaw`):
+
+- **Tagged-template form only:** `` prisma.$queryRaw`SELECT * FROM "Contact" WHERE id = ${id}` `` — never `$queryRawUnsafe`/`$executeRawUnsafe` with any value that traces back to user input (form fields, query params, request body). The tagged-template form parameterizes interpolated values the same way Prisma's normal query API does; the `Unsafe` variants concatenate raw strings and reintroduce exactly the injection risk Prisma otherwise prevents by default.
+- Input reaching a raw query has typically already passed Joi validation at the `packages/shared-schemas` boundary (see `expertise-api-rest`) — that's defense at a different layer, not a substitute for parameterization here.
+- A migration file's raw SQL (e.g. the partial index in "Soft delete rules" above) is static, developer-authored SQL with no runtime user input, so it isn't subject to this rule the same way a runtime query is — but never template a runtime value into a migration file either.
+
+---
+
 ## Query-level code quality (Prisma-specific)
 
 Universal principles (simplicity, naming, DRY) are in `expertise-code-quality` — this only covers what's specific to writing Prisma queries well.
@@ -349,7 +379,7 @@ Universal principles (simplicity, naming, DRY) are in `expertise-code-quality` �
 - **Avoid N+1 queries.** Never loop over a list calling `prisma.x.findUnique`/`findFirst` once per item (e.g. resolving each contact's supported bodies one at a time when rendering the contacts list). Use a nested `include`/`select` on the parent query, or one batched `findMany({ where: { id: { in: [...] } } })`. This is the single most common real-world Prisma performance mistake, and it hits directly on this app's list screens (contacts, supported bodies).
 - **Select only the fields the screen needs.** Default to an explicit `select` (or `include` with a nested `select`) instead of always fetching full records — a list view rendering three columns shouldn't pull every column of `Contact`/`SupportedBody`. Fetch the full record only where the caller actually needs it (e.g. an edit form).
 - **Wrap genuinely multi-step writes in `$transaction`.** Anything that changes more than one row and must not partially succeed belongs in `prisma.$transaction([...])` (or the interactive callback form) — not two independent `await`s. Concrete case in this app: approving a `RegistrationRequest` both creates/updates a `Contact` and sets the request's `status` to `APPROVED`; if the second write fails after the first succeeds, the app is left with a live `Contact` and a request permanently stuck at `PENDING`.
-- **Index check (verified against the schema above):** `SupportedBody.domainId` (`@@index`), `SupportedBody.companyId` (`@unique`), `Contact.status` (`@@index`), `Contact.domainId` (`@@index`), and `RegistrationRequest.supportedBodyId` (`@@index`) are already covered — no missing index found. Re-run this check whenever a new column gets filtered or sorted on frequently; a query that scans a growing table without an index is a bug that only shows up after the data grows.
+- **Index check (verified against the schema above):** `SupportedBodyOnDomain.domainId` (`@@index`), `SupportedBody.companyId` (`@unique`), `Contact.status` (`@@index`), and `RegistrationRequest.supportedBodyId` (`@@index`) are already covered — no missing index found. Re-run this check whenever a new column gets filtered or sorted on frequently; a query that scans a growing table without an index is a bug that only shows up after the data grows.
 
 ---
 
@@ -386,5 +416,6 @@ Mechanics (Jest config, mocking conventions, coverage priorities) live in `exper
 - Any operation touching more than one model that must succeed or fail together is wrapped in an explicit `prisma.$transaction(async (tx) => ...)` — the extension only makes a single write atomic with its own audit row, not multiple writes atomic with each other.
 - Any new bulk (`updateMany`/`deleteMany`) usage on an audited model has an explicit audit-coverage decision (looped single `update`s inside a transaction, since bulk methods don't return affected rows to diff) — not silently unaudited.
 - Queries against domain-scoped models go through that model's own `scopeX` helper (e.g. `scopeContact`, `scopeSupportedBody`) — never a copy-pasted `where: { domainId }` that assumes every model reaches its domain the same way.
+- Any new `$queryRaw`/`$executeRaw` usage uses the tagged-template form only — no `$queryRawUnsafe`/`$executeRawUnsafe` with user-traceable input.
 - New business-key/uniqueness invariants (like `companyId`) are enforced with a DB-level `@unique`/`@@unique`, not only in application code.
 - Schema changes ship with a committed migration in the same PR; `generate` is re-run if the installed Prisma version doesn't chain it automatically.

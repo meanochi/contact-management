@@ -1,11 +1,11 @@
 ---
 name: expertise-testing
-description: 'Jest/React Testing Library conventions, TDD workflow, and coverage priorities for this project (Next.js App Router, Mantine, Redux Toolkit, Prisma, Joi). Use when writing or changing any *.test.ts(x) file, Jest/RTL config, or deciding what/how to test a new feature or bug fix. Not for E2E/Playwright test design, general component/API/schema conventions (see expertise-react-nextjs, expertise-api-rest, expertise-postgres-prisma), or non-test TypeScript conventions (see expertise-nodejs-typescript).'
+description: 'Jest/React Testing Library conventions for apps/web (Next.js, Mantine, Redux Toolkit), and @nestjs/testing conventions for apps/api (NestJS, Prisma, Joi), TDD workflow, and coverage priorities. Use when writing or changing any *.test.ts(x) file, Jest config, or deciding what/how to test a new feature or bug fix, in either app. Not for E2E/Playwright test design, general component/API/schema conventions (see expertise-react-nextjs, expertise-api-rest, expertise-postgres-prisma), or non-test TypeScript conventions (see expertise-nodejs-typescript).'
 ---
 
-# Testing: Jest + React Testing Library
+# Testing: Jest (+ React Testing Library in `apps/web`, `@nestjs/testing` in `apps/api`)
 
-> Package/version specifics (Jest, Next.js, RTL, Mantine APIs) drift fast. Check the installed versions in `package.json`/`node_modules` and each tool's current docs before treating a version claim here as permanent fact. The conventions and decision rules below are the stable part.
+> Package/version specifics (Jest, Next.js, NestJS, RTL, Mantine APIs) drift fast. Check the installed versions in `package.json`/`node_modules` and each tool's current docs before treating a version claim here as permanent fact. The conventions and decision rules below are the stable part.
 
 > Universal engineering principles (simplicity, naming, comments explain why, DRY as a judgment call, error handling) live in `expertise-code-quality` and apply here too — this file only adds what's specific to writing tests.
 
@@ -48,9 +48,31 @@ const config: Config = {
 export default createJestConfig(config)
 ```
 
-**B. Shared non-Next packages** (e.g. `packages/db`, `packages/shared-types`) — `next/jest` doesn't apply; use a plain `ts-jest`/`@swc/jest` config with `testEnvironment: 'node'`.
+**B. Shared non-Next packages** (e.g. `packages/db`, `packages/shared-schemas`) — `next/jest` doesn't apply; use a plain `ts-jest`/`@swc/jest` config with `testEnvironment: 'node'`.
 
-**Server-side code inside the Next.js app** (route handlers, Prisma queries, Joi schemas) should also run under `testEnvironment: 'node'`, not `jsdom`. Either split into a multi-project Jest config, or add `/** @jest-environment node */` at the top of the test file.
+**C. `apps/api` (NestJS)** — use `@nestjs/testing`'s `Test.createTestingModule(...)`, not `next/jest` (this app has nothing to do with Next.js). Controller/service unit tests build a minimal testing module and mock what the class under test depends on:
+
+```ts
+// apps/api/src/contacts/contacts.service.spec.ts
+import { Test } from "@nestjs/testing";
+import { ContactsService } from "./contacts.service";
+
+describe("ContactsService", () => {
+  let service: ContactsService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({ providers: [ContactsService] }).compile();
+    service = module.get(ContactsService);
+  });
+
+  it("creates a contact", async () => {
+    // mock packages/db's prisma client (see expertise-postgres-prisma's Prisma-mocking guidance) — same
+    // mocking approach as any other Prisma-backed unit test, just invoked from a Nest testing module.
+  });
+});
+```
+
+For a full HTTP-level test of a controller (Pipes/Interceptors/Filters wired up), use `@nestjs/testing`'s `createNestApplication()` + `supertest` against the compiled module, rather than calling the controller class's methods directly — that's the only way to actually exercise the Pipe/Interceptor/Filter pipeline described in `expertise-api-rest`.
 
 `jest.setup.ts` baseline:
 ```ts
@@ -124,22 +146,21 @@ it('submits the form when required fields are filled', async () => {
 
 Three-tier strategy instead:
 
-1. **Extract the logic, test it directly — no rendering.** Anything an async Server Component does before returning JSX (fetching + shaping data, applying domain-scoping rules, computing derived fields) belongs in a plain exported function, unit-tested with ordinary Jest:
+1. **Extract the logic, test it directly — no rendering.** Anything an async Server Component does before returning JSX (calling `apps/api` via `lib/api-client.ts`, shaping the response, computing derived fields) belongs in a plain exported function, unit-tested with ordinary Jest — mocking `lib/api-client.ts`'s fetch call, not Prisma (`apps/web` never touches Prisma at all, AD-1; the actual domain-scoping/permission logic this used to test lives in `apps/api`'s services now — see that app's own tests, `expertise-api-rest`):
    ```ts
-   // app/contacts/getVisibleContacts.ts
-   export async function getVisibleContacts(userId: string) {
-     const user = await getUserWithScope(userId)
-     return prisma.contact.findMany({ where: scopeFilter(user) })
+   // app/(internal)/contacts/getContactsForList.ts
+   export async function getContactsForList(searchParams: Record<string, string>) {
+     const res = await apiFetch(`/contacts?${new URLSearchParams(searchParams)}`)
+     return res.data
    }
    ```
    ```ts
-   // getVisibleContacts.test.ts
-   /** @jest-environment node */
-   it('excludes contacts outside the coordinator body scope', async () => {
-     // mock prisma, assert scopeFilter narrows correctly
+   // getContactsForList.test.ts
+   it('passes the search params through to apps/api', async () => {
+     // mock apiFetch (lib/api-client.ts), assert the querystring is built correctly
    })
    ```
-   This is the highest-leverage move: it turns "untestable Server Component" into fully testable logic — and it's usually where the real business risk (permissions, filtering) actually lives.
+   This is the highest-leverage move on the `apps/web` side: it turns "untestable Server Component" into fully testable logic. The actual highest-risk logic — domain-scoping, permissions — now lives entirely in `apps/api` and is tested there with `@nestjs/testing` (§1C), not here.
 2. **Synchronous Server/Client Components** (no top-level `await`) render fine with `render()` as in §3 — test those normally.
 3. **Full Server Component rendering (data fetch + JSX together) is an E2E concern, not a Jest unit test.** Cover it with the project's E2E layer. Don't invest time mocking `React.cache`/`fetch` boundaries to force an async component through `render()`.
 
@@ -193,13 +214,13 @@ Exceptions — dedicated folders:
 Don't chase a global coverage percentage — it rewards testing trivial code and says nothing about the risk areas that actually matter. Prioritize by **consequence of being wrong**.
 
 **High priority — test thoroughly, including edge cases:**
-- **Permission / domain-scoping logic** (coordinator sees only their body's contacts, super-admin sees all, org-rep sees a restricted subset). The single highest-risk area in the app — a bug here leaks data across organizational boundaries. Test every role × boundary condition (empty scope, exactly one body, user with no assigned body).
+- **Permission / domain-scoping logic, in `apps/api`** (coordinator sees only their body's contacts, super-admin sees all, org-rep sees a restricted subset). The single highest-risk area in the app — a bug here leaks data across organizational boundaries. Test every role × boundary condition (empty scope, exactly one body, user with no assigned body), at the Guard/service level (§1C) — this logic doesn't exist in `apps/web` at all (AD-1).
 - **Soft-delete logic** (no real `DELETE`, only status → inactive). Test that inactive contacts are excluded from default list queries but still retrievable where required, and that reactivation works.
 - **Joi validation edge cases** for every user-facing form, especially the public registration form — empty strings vs. missing keys, boundary lengths, malformed email/phone, any field the public form exposes that the internal one doesn't.
 - **Registration-request approval state machine**: every legal transition (pending→approved, pending→rejected) and every illegal one your code must block (double-approval, approving an already-rejected request).
 
 **Medium priority — main path only:**
-- API route handlers: one success case + one validation-failure case per endpoint is usually enough; don't re-test Joi edge cases already covered at the schema level.
+- `apps/api` controllers: one success case + one validation-failure case per endpoint is usually enough; don't re-test Joi edge cases already covered at the schema level.
 - Redux slices/RTK Query: the transformations/cache behavior your code adds, not RTK's own internals.
 
 **Low priority / skip:** trivial getters, pure prop pass-through components, framework glue that would only break if Next.js/React/Mantine itself broke. Don't use a snapshot test as a substitute for a real assertion.

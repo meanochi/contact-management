@@ -33,27 +33,40 @@ Applies to every file in this repo, every layer, before any domain-specific skil
 
 **This project is greenfield — no `apps/`/`packages/` exist yet.** The tree below is `ARCHITECTURE-SPINE.md`'s own Structural Seed, filled in with the per-layer locations each domain skill already establishes; set it up as-is on first implementation, don't invent an alternative shape.
 
+**Client and server are two separate applications** (`ARCHITECTURE-SPINE.md` AD-1) — `apps/web` (Next.js, presentation only) and `apps/api` (NestJS, the entire API + Service/Domain layer + the only consumer of `packages/db`). They communicate only over HTTP, through `apps/web/lib/api-client.ts` (AD-12).
+
 ```text
 contact-management/
   apps/
-    internal/                     # the only app built in this MVP (AD-1)
-      app/                        # Presentation — routes/layouts/Route Handlers (expertise-react-nextjs §7, expertise-api-rest)
-        (internal)/ (public)/ api/
+    web/                           # presentation only — no Route Handlers, no packages/db access (AD-1)
+      app/                         # Presentation — routes/layouts (expertise-react-nextjs §7)
+        (internal)/ (public)/
       components/
-        <resource>/                # feature-scoped components — used by one feature only (e.g. ContactEditForm)
-                                    # generic/shared UI does NOT live here — see packages/ui below
+        <resource>/                 # feature-scoped components — used by one feature only (e.g. ContactEditForm)
+                                     # generic/shared UI does NOT live here — see packages/ui below
       lib/
-        features/<resource>/       # Service/Domain layer — business rules + the only app code allowed to call packages/db
-        api/                       # cross-cutting API-layer helpers: with-validation.ts, response.ts, rate-limit.ts (expertise-api-rest)
-        hooks/                     # cross-feature custom hooks — feature-specific hooks stay colocated with their component
-        utils/                     # cross-feature pure helpers — feature-specific ones stay colocated in their own feature folder
-        store.ts                   # Redux store setup (expertise-react-nextjs §5)
-    public/                        # Phase 2+, not built now (AD-1)
+        api-client.ts                # the only way apps/web reaches apps/api (expertise-react-nextjs §5)
+        api/                          # RTK Query slices (contactsApi.ts, etc.)
+        hooks/                        # cross-feature custom hooks — feature-specific hooks stay colocated with their component
+        utils/                        # cross-feature pure helpers — feature-specific ones stay colocated in their own feature folder
+        store.ts                     # Redux store setup (expertise-react-nextjs §5)
+    api/                            # the entire API + Service/Domain layer (AD-1)
+      src/
+        main.ts                      # bootstrap; CORS enabled here (AD-12)
+        app.module.ts                 # root module — imports every resource module
+        <resource>/                   # e.g. contacts/
+          <resource>.module.ts         # registers controller+service with Nest's DI — required
+          <resource>.controller.ts     # API layer — thin: parse, validate (Pipe), call service, respond
+          <resource>.service.ts        # Service/Domain layer — the only code allowed to call packages/db
+        common/
+          pipes/                        # JoiValidationPipe (expertise-api-rest)
+          interceptors/                 # ResponseInterceptor (expertise-api-rest)
+          filters/                       # AllExceptionsFilter (expertise-api-rest)
   packages/
-    db/                           # Prisma schema/client/extensions — the only PrismaClient (expertise-postgres-prisma)
-    shared-schemas/<resource>/     # types.ts + schema.ts per resource — imported by both Presentation and API (see below)
-    ui/                           # shared/generic UI: design tokens, Status Badge, Attention Card, Empty State, Dropzone wrapper, Button(primary) — anything used by more than one feature (DESIGN.md)
-    config/                        # shared tsconfig/eslint base
+    db/                             # Prisma schema/client/extensions — the only PrismaClient, reachable only from apps/api (expertise-postgres-prisma)
+    shared-schemas/<resource>/       # types.ts + schema.ts per resource — imported by apps/web (RHF) and apps/api (Pipes)
+    ui/                             # shared/generic UI: design tokens, Status Badge, Attention Card, Empty State, Dropzone wrapper, Button(primary) — anything used by more than one feature (DESIGN.md); consumed only by apps/web
+    config/                          # shared tsconfig/eslint base
 ```
 
 ### Shared vs. feature-scoped — the rule
@@ -62,30 +75,30 @@ Code used by exactly one feature lives inside that feature's own folder. The mom
 
 | Kind of code | Feature-scoped home | Shared home (used by 2+ features) |
 |---|---|---|
-| Business rules / data access | `apps/internal/lib/features/<resource>/` | N/A — see "no separate Repository layer" below |
+| Business rules / data access | `apps/api/src/<resource>/<resource>.service.ts` | N/A — see "no separate Repository layer" below |
 | Types + Joi schema (DTOs, request/response shapes) | — this pairing is always shared, see below | `packages/shared-schemas/<resource>/{types.ts,schema.ts}` |
-| React components | `apps/internal/components/<resource>/` | `packages/ui/` (design-system-level pieces — DESIGN.md's Components) |
-| Custom hooks | colocated with the component/feature that uses it | `apps/internal/lib/hooks/` |
-| Pure utility functions | colocated in the feature's own folder | `apps/internal/lib/utils/` |
-| API-layer cross-cutting helpers (validation wrapper, response envelope, rate limiting) | — always cross-cutting | `apps/internal/lib/api/` (`expertise-api-rest`) |
+| React components | `apps/web/components/<resource>/` | `packages/ui/` (design-system-level pieces — DESIGN.md's Components) |
+| Custom hooks | colocated with the component/feature that uses it | `apps/web/lib/hooks/` |
+| Pure utility functions | colocated in the feature's own folder | `apps/web/lib/utils/` |
+| API-layer cross-cutting helpers (validation Pipe, response Interceptor/Filter, rate-limit Guard) | — always cross-cutting | `apps/api/src/common/` (`expertise-api-rest`) |
 
-**Why `types.ts`/`schema.ts` live in `packages/shared-schemas`, not inside `apps/internal`:** `expertise-nodejs-typescript` establishes the *pairing pattern* (a hand-written `types.ts` + a `Record`-checked `schema.ts` per resource); `ARCHITECTURE-SPINE.md`'s Structural Seed requires this pair to be reachable from both the Presentation layer (React Hook Form) and the API layer (Route Handler validation), which under AD-11 (apps depend on packages, never the reverse) means it has to live in a package, not inside `apps/internal`. Put the pair at `packages/shared-schemas/<resource>/`.
+**Why `types.ts`/`schema.ts` live in `packages/shared-schemas`, not inside `apps/web` or `apps/api`:** `expertise-nodejs-typescript` establishes the *pairing pattern* (a hand-written `types.ts` + a `Record`-checked `schema.ts` per resource); this pair must be reachable from both `apps/web` (React Hook Form) and `apps/api` (Pipe validation), two separate applications, which under AD-11 (apps depend on packages, never the reverse) means it has to live in a package, not inside either app. Put the pair at `packages/shared-schemas/<resource>/`.
 
-**No separate Repository layer.** The Service/Domain layer (`apps/internal/lib/features/<resource>/`) is the only layer allowed to call `packages/db`, per the architecture's four-layer model — it does both business rules *and* data access in the same module. Where `expertise-postgres-prisma` says "repository-layer helper" or "repository function," that means an ordinary function inside this same Service/Domain module, not a separate architectural layer — adding one would be a fifth layer nothing in this project's requirements calls for.
+**No separate Repository layer.** The Service/Domain layer (`apps/api/src/<resource>/<resource>.service.ts`) is the only layer allowed to call `packages/db`, per the architecture's four-layer model — it does both business rules *and* data access in the same module. Where `expertise-postgres-prisma` says "repository-layer helper" or "repository function," that means an ordinary method inside this same service class, not a separate architectural layer — adding one would be a fifth layer nothing in this project's requirements calls for.
 
 ### Layer separation — don't mix concerns across the four layers
 
 Every file belongs to exactly one of Presentation → API → Service/Domain → Data (`ARCHITECTURE-SPINE.md`'s Design Paradigm); a file mixing two is a structural defect, not a style nit:
 
-- Don't call `packages/db` from a Route Handler or a component — only the Service/Domain layer does.
-- Don't put a business rule (a state-machine transition, a domain-scope calculation) inside a Route Handler — it parses, validates, calls Service/Domain, responds (`expertise-api-rest`).
-- Don't put data-fetching inside a Client Component or a `useEffect` — Server Components and Route Handlers are the only places that read data (`expertise-react-nextjs` §1).
+- Don't call `packages/db` from a controller or a React component — only a `.service.ts` in `apps/api` does. `packages/db` isn't even importable from `apps/web` (AD-1).
+- Don't put a business rule (a state-machine transition, a domain-scope calculation) inside a NestJS controller — it parses, validates, calls the service, responds (`expertise-api-rest`).
+- Don't put data-fetching inside a Client Component or a `useEffect` in `apps/web` — Server Components (via `lib/api-client.ts`) are the only place that reads data client-app-side (`expertise-react-nextjs` §1).
 
 ### Naming
 
-- Folders: kebab-case, plural for a resource's collection folder (e.g. `features/registration-requests/`), matching the URL/table naming already used in `expertise-api-rest`.
-- Files: PascalCase for a component (`ContactEditForm.tsx`), camelCase for everything else (`scopeContact.ts`, `withBodyValidation.ts`) — TS-level naming/casing conventions in depth: `expertise-nodejs-typescript`.
-- A resource's name must match across every layer it's referenced in: the Prisma model (PascalCase singular), the URL segment (kebab-case plural), and the `packages/shared-schemas` folder — a name that drifts between layers is harder to grep and easier to accidentally duplicate.
+- Folders: kebab-case, plural for a resource's collection folder (e.g. `<resource-plural>/`), matching the URL naming already used in `expertise-api-rest`.
+- Files: PascalCase for a React component (`ContactEditForm.tsx`), camelCase for everything else (`scopeContact.ts`), except NestJS's own resource-prefixed convention in `apps/api` (`contacts.controller.ts`, `contacts.service.ts`, `contacts.module.ts`) — TS-level naming/casing conventions in depth: `expertise-nodejs-typescript`.
+- A resource's name must match across every layer it's referenced in: the Prisma model (PascalCase singular), the URL segment (kebab-case plural), the NestJS module/controller/service file prefix, and the `packages/shared-schemas` folder — a name that drifts between layers is harder to grep and easier to accidentally duplicate.
 
 ### Before adding a new folder, layer, or abstraction
 

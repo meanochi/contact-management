@@ -6,9 +6,9 @@
 
 ---
 
-## סטטוס: רוב ההחלטות אושרו — נותר פריט אחד לשלב הארכיטקטורה
+## סטטוס: כל החלטות הסטאק אושרו, כולל הפרדת קליינט/שרת — נותרה החלטת אימות אחת
 
-הרשומות למטה מתעדות את הבחירות שאושרו. פריט אחד בלבד עדיין פתוח (מסומן ⚠️, בסוף המסמך) ויוכרע רשמית בשלב הארכיטקטורה.
+הרשומות למטה מתעדות את הבחירות שאושרו, כולל עדכון מהותי מ-24/09/2026: הפרויקט עבר לארכיטקטורת קליינט/שרת מופרדת (`apps/web` + NestJS `apps/api`) — ר' סעיף 4/4A. פריט אחד בלבד עדיין פתוח (מסומן ⚠️, בסוף המסמך): שיטת האימות למשתמשים פנימיים.
 
 ---
 
@@ -87,6 +87,29 @@
 - "יותר מדי אפשרויות" — Next.js מציעה כמה דרכים לעשות אותו דבר (Pages Router מול App Router, API Routes מול Server Actions), מה שעלול לבלבל מי שחדש בעולם. **נצטרך להחליט ולתעד איזו גישה נלך בה** בשלב הארכיטקטורה (Winston, אדריכל המערכת ב-BMAD, יציג את זה עם כל היתרונות/חסרונות).
 
 **חלופות שנשקלו:** לא נדון בזה כי הבחירה כבר ניתנה; לצורך ההשוואה בלבד — Express.js לשרת נפרד + Vite/CRA לקליינט נפרד הן החלופה ה"קלאסית" שדורשת יותר תשתית משלימה (CORS, שני deployments נפרדים וכו').
+
+**עדכון (24/09/2026, החלטת ר"צ + שלב ארכיטקטורה):** ה"חיסרון" שצוין למעלה (App Router מול Pages Router, API Routes מול Server Actions) **לא זה מה שהוכרע בסוף** — הוכרעה שאלה עמוקה יותר, שהמסמך הזה עצמו סימן כ"נדחה כי הבחירה כבר ניתנה": **הפרויקט עבר לארכיטקטורת קליינט/שרת מופרדת.** `Next.js` נשאר, אבל **רק** בתור ה-frontend (`apps/web`) — בלי API Routes, בלי גישה ישירה למסד הנתונים. כל ה-API + הלוגיקה העסקית עברו לאפליקציית שרת נפרדת לגמרי, ב-**NestJS** (`apps/api` — ר' סעיף חדש למטה). זו למעשה גרסה של החלופה ה"קלאסית" שתוארה כאן למעלה — רק עם NestJS במקום Express גולמי. הפירוט המלא (כולל ה-trade-offs: deployment כפול, קריאת רשת נוספת, CORS) ב-`ARCHITECTURE-SPINE.md` (AD-1, AD-12) וב-`expertise-api-rest`/`expertise-react-nextjs`. השאלה הפתוחה שסומנה בתחתית מסמך זה ("מבנה מדויק של האפליקציות") — **הוכרעה בכך**, ר' עדכון בסעיף המתאים.
+
+---
+
+## 4A. NestJS — מסגרת עבודה לשרת (`apps/api`) — הוחלט 24/09/2026
+
+**מה זה:** NestJS היא framework לבניית שרתי Node.js, בנויה בהשראת Angular — מאורגנת סביב מודולים/controllers/services עם Dependency Injection מובנה. שונה מ-Express (שהיה "חלופה קלאסית" שצוינה בסעיף 4 למעלה) בכך שהיא מגיעה עם מבנה מוכתב-מראש (modules, Guards, Pipes, Interceptors, Filters) במקום להשאיר את כל הארגון לבחירת המפתח.
+
+**למה בחרנו בזה:** הוחלט ע"י ר"צ, כחלק מההחלטה על הפרדת קליינט/שרת (ר' עדכון בסעיף 4). NestJS היא הבחירה הנפוצה כש-Node.js צריך "framework מובנה" ברמה דומה למה שAngular נותן ל-frontend — מתאים לפרויקט שרוצה מבנה עקבי ונאכף (לא "עוד דרך אחת מיני רבות" כמו ב-Express הגולמי).
+
+**יתרונות:**
+- מבנה אחיד ונאכף (module/controller/service לכל משאב) — פחות החלטות ארגון "איך" בכל endpoint חדש.
+- מנגנונים מובנים בדיוק למה שכבר היה צריך בגרסת ה-Route-Handler הישנה: Guards (=מה שהיה `proxy.ts`), Pipes (=ולידציה), Interceptors/Filters (=מעטפת תגובה אחידה) — לא היינו צריכים להמציא תחליף, NestJS כבר נותן את זה.
+- אינטגרציה native ל-Swagger/OpenAPI (`@nestjs/swagger`, decorator-based) — פותר את החיסרון שצוין בסעיף 9 (Joi) לגבי תיעוד API ידני.
+- תמיכה native ב-`@nestjs/testing` לבדיקות, ו-`@nestjs/throttler` ל-rate limiting (היה צריך ספרייה חיצונית קודם).
+
+**חסרונות / סיכונים:**
+- עקומת למידה תלולה יותר מ-Express הגולמי — מושגים כמו Modules/Providers/Decorators/DI צריך להכיר.
+- תשתית נוספת מול המבנה הקודם (אפליקציה שנייה, deployment שני, CORS) — התיעוד המלא של ה-trade-off הזה ב-`ARCHITECTURE-SPINE.md`.
+- Joi (לא `class-validator`, שהוא ברירת המחדל של NestJS) דורש Pipe מותאם-אישית (`JoiValidationPipe`) — לא "עובד מהקופסה" עם הכלים המובנים של Nest לולידציה/Swagger derivation; מתועד ב-`expertise-api-rest`.
+
+**חלופות שנשקלו:** Express.js (גמיש יותר, פחות מובנה — זו הייתה ה"חלופה הקלאסית" שצוינה בסעיף 4 למעלה, ולבסוף לא נבחרה לטובת NestJS), Fastify (מהיר יותר מ-Express גולמי, אך גם הוא פחות מובנה מ-NestJS).
 
 ---
 
@@ -250,31 +273,33 @@
 
 **עדכון (16/09/2026, מחקר לצורך `expertise-api-rest` skill):** הכלי המקורי שתוכנן לתיעוד Swagger — `next-swagger-doc` — **לא עודכן מעל שנה**, בעוד שקיים כלי מתחרה פעיל ומתוחזק, בנוי ספציפית ל-Next.js App Router: **`next-openapi-gen`**. שווה לשקול מעבר לפני שמתחילים לכתוב את שכבת ה-API בפועל. פירוט מלא ב-`.claude/skills/expertise-api-rest/SKILL.md`.
 
+**עדכון (24/09/2026, בעקבות ההחלטה על NestJS — ר' סעיף 4A):** ההערה הקודמת (`next-openapi-gen`) **התייתרה** — היא הייתה רלוונטית רק כשה-API היה Next.js Route Handlers. עכשיו שה-API כולו עבר ל-`apps/api` (NestJS), תיעוד ה-Swagger נעשה עם **`@nestjs/swagger`** — כלי native ל-framework, מבוסס decorators (`@ApiOperation`, `@ApiResponse`), לא JSDoc. עקרונות ה-REST/URL/HTTP-method/status-code בסעיף הזה **לא השתנו** — רק המימוש הטכני של התיעוד. פירוט: `expertise-api-rest`.
+
 ---
 
 ## החלטות שהתקבלו ✅ (סיכום)
 
 | נושא | הוחלט |
 |---|---|
-| מבנה פרויקט | Monorepo + Turborepo |
+| מבנה פרויקט | Monorepo + Turborepo, **קליינט ושרת כשתי אפליקציות נפרדות** (`apps/web` + `apps/api`) — עודכן 24/09/2026, ר' סעיף 4/4A |
 | מנהל חבילות | npm (workspaces) |
+| ניהול קוד / CI-CD | GitLab (`.gitlab-ci.yml`) — הוחלט 24/09/2026 |
 | שפה | TypeScript (גם React וגם Node) |
-| Frontend framework | Next.js (full-stack — גם client וגם server) |
+| Frontend framework | Next.js — **רק client** (`apps/web`), בלי API Routes (עודכן 24/09/2026) |
+| Backend framework | **NestJS** (`apps/api`) — כל ה-API + הלוגיקה העסקית (חדש, 24/09/2026, ר' סעיף 4A) |
 | ניהול טפסים | React Hook Form |
 | ספריית UI | Mantine |
-| State management | Redux Toolkit |
-| מסד נתונים | PostgreSQL, גישה דרך Prisma (+`pg` למקרי קצה) |
-| ואלידציה | Joi |
-| בדיקות יחידה | Jest |
-| תיעוד API | Swagger, דרך `swagger-jsdoc` |
+| State management | Redux Toolkit (RTK Query מול `apps/api`) |
+| מסד נתונים | PostgreSQL, גישה דרך Prisma (+`pg`) — נגיש רק מ-`apps/api` |
+| ואלידציה | Joi (משותף בין `apps/web` ל-`apps/api` דרך `packages/shared-schemas`) |
+| בדיקות יחידה | Jest (React Testing Library ב-`apps/web`, `@nestjs/testing` ב-`apps/api`) |
+| תיעוד API | `@nestjs/swagger` (decorator-based) — עודכן 24/09/2026, ר' סעיף 12 |
 | סגנון API | REST |
 | נקודת כניסה ל-BMAD | ישר ל-PRD (John), ללא שלב Analyst מקדים |
 
-## פתוח / ממתין להחלטה ⚠️
+## החלטות שעדיין פתוחות ⚠️
 
-הפריט היחיד שנותר פתוח — יוכרע **רשמית בשלב הארכיטקטורה** (Winston), עם כל הנימוקים:
-
-1. מבנה מדויק של האפליקציות בתוך ה-Monorepo (אפליקציית Next.js אחת לכולם, מול כמה אפליקציות נפרדות לפי סוג משתמש) + החלטה על App Router מול Pages Router.
+1. **שיטת אימות/הזדהות למשתמשים פנימיים** (רכז/מנהל-על) — עדיין לא הוכרעה (שאלה פתוחה 1 ב-PRD). מסובכת מעט יותר מאז ההחלטה על NestJS: `Auth.js` (שהוצע בשלב הארכיטקטורה) הוא ספרייה ספציפית ל-Next.js ולא מתאים כששכבת האכיפה יושבת ב-`apps/api` (NestJS) — המועמדים הטבעיים עכשיו הם Passport.js / `@nestjs/jwt`. אין דחיפות: אין login באפיק 1 כלל (החלטת מוצר), רק לפני Epic 3. ר' `ARCHITECTURE-SPINE.md` AD-9.
 
 ---
 

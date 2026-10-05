@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TextInput, Table, Skeleton, Pagination, Group, Badge, Button } from "@mantine/core";
+import { TextInput, Select, Table, Skeleton, Pagination, Group, Badge, Button } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { EmptyState } from "@contact-management/ui";
 import { useListSupportedBodiesQuery } from "@/lib/api/supportedBodiesApi";
@@ -24,20 +24,27 @@ export function SupportedBodiesList({
 }) {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 300); // UX-DR22
+  const [domainId, setDomainId] = useState<string | null>(null);
+  // Mantine Select needs string values — "" means "הכל" (no status filter),
+  // converted to a real boolean (or omitted) only when building the query.
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   const { data: domains = [] } = useListActiveDomainsQuery();
   const { data, isLoading } = useListSupportedBodiesQuery({
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(domainId ? { domainId } : {}),
+    ...(statusFilter ? { isActive: statusFilter === "active" } : {}),
     page,
     pageSize: PAGE_SIZE,
   });
 
   const domainNameById = new Map(domains.map((d) => [d.id, d.name]));
+  const hasActiveFilters = Boolean(debouncedSearch || domainId || statusFilter);
 
   return (
     <>
-      <Group mb="md">
+      <Group mb="md" align="flex-end">
         <TextInput
           placeholder="חיפוש לפי שם או ח&quot;פ"
           value={search}
@@ -46,6 +53,29 @@ export function SupportedBodiesList({
             setPage(1);
           }}
           style={{ flex: 1 }}
+        />
+        <Select
+          placeholder="תחום"
+          clearable
+          data={domains.map((d) => ({ value: d.id, label: d.name }))}
+          value={domainId}
+          onChange={(value) => {
+            setDomainId(value);
+            setPage(1);
+          }}
+        />
+        <Select
+          placeholder="סטטוס"
+          clearable
+          data={[
+            { value: "active", label: "פעיל" },
+            { value: "inactive", label: "לא פעיל" },
+          ]}
+          value={statusFilter}
+          onChange={(value) => {
+            setStatusFilter(value);
+            setPage(1);
+          }}
         />
       </Group>
 
@@ -110,9 +140,9 @@ export function SupportedBodiesList({
       ) : (
         <EmptyState
           icon="🏢"
-          title={search ? "אין תוצאות תואמות" : "אין עדיין גופים נתמכים"}
-          description={search ? "נסה/י מונח חיפוש אחר" : "התחילו ביצירת הגוף הנתמך הראשון"}
-          action={!search ? <Button onClick={onCreateNew}>גוף נתמך חדש</Button> : undefined}
+          title={hasActiveFilters ? "אין תוצאות תואמות" : "אין עדיין גופים נתמכים"}
+          description={hasActiveFilters ? "נסה/י לשנות את הסינון" : "התחילו ביצירת הגוף הנתמך הראשון"}
+          action={!hasActiveFilters ? <Button onClick={onCreateNew}>גוף נתמך חדש</Button> : undefined}
         />
       )}
     </>

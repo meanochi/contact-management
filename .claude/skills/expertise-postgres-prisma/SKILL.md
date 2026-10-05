@@ -88,7 +88,7 @@ model SupportedBodyOnDomain {
 
 `companyId` (ח"פ) is the natural business key — enforce uniqueness with `@unique` at the DB level, not only in application code. A bulk import or a second entry point can race past an app-level check; a DB constraint can't be raced past.
 
-### Contact — soft delete, many-to-many with SupportedBody, no direct Domain field
+### Contact — soft delete, many-to-many with SupportedBody, domain reached only as a subset of a linked body's own domains
 
 Use an explicit status enum, not a boolean, so the model can grow (e.g. a future `PENDING` state) without another migration:
 
@@ -107,7 +107,9 @@ enum ExternalRequestSource {
 
 model Contact {
   id         String        @id @default(cuid())
-  fullName   String        @map("full_name")
+  firstName  String        @map("first_name") // kept separate from lastName — product decision, Story 1.5 form has two inputs
+  lastName   String        @map("last_name")
+  idNumber   String?       @map("id_number") // ת"ז — optional free text, no checksum validation required
   role       String?
   emails     String[]      @default([]) // FR-10: more than one address is supported per contact
   phone      String?
@@ -122,9 +124,9 @@ model Contact {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  // No direct domainId: a Contact's domain(s) are reached only through the
-  // SupportedBody/SupportedBodies it's linked to (product decision — a
-  // contact belongs to a body, which already carries its own domain(s)).
+  // No direct domainId column: a Contact never picks a domain outright — it's
+  // always a subset of whichever SupportedBody(ies) it's linked to actually
+  // carry. See ContactOnSupportedBodyDomain below.
   supportedBodies ContactOnSupportedBody[]
 
   @@index([status])
@@ -140,9 +142,28 @@ model ContactOnSupportedBody {
 
   contact       Contact       @relation(fields: [contactId], references: [id])
   supportedBody SupportedBody @relation(fields: [supportedBodyId], references: [id])
+  domains       ContactOnSupportedBodyDomain[]
 
   @@id([contactId, supportedBodyId])
   @@index([supportedBodyId])
+}
+
+// Post-1.6 revision (confirmed with Rachel): a SupportedBody can carry more
+// than one Domain, but the Contact representing it might only be "the
+// contact person" for some of them, not all. Always a *subset* of the linked
+// SupportedBody's own domains — enforced in the Service layer (fetch the
+// body's own domains, check the submitted set is a subset), not just the UI;
+// Joi has no way to know which domains belong to which body.
+model ContactOnSupportedBodyDomain {
+  contactId       String @map("contact_id")
+  supportedBodyId String @map("supported_body_id")
+  domainId        String @map("domain_id")
+
+  contactOnSupportedBody ContactOnSupportedBody @relation(fields: [contactId, supportedBodyId], references: [contactId, supportedBodyId])
+  domain                 Domain                 @relation(fields: [domainId], references: [id])
+
+  @@id([contactId, supportedBodyId, domainId])
+  @@index([domainId])
 }
 ```
 

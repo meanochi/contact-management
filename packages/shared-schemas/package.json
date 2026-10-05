@@ -8,7 +8,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./domains": "./dist/domains/types.js",
-    "./supported-bodies": "./dist/supported-bodies/index.js"
+    "./supported-bodies": "./dist/supported-bodies/index.js",
+    "./contacts": "./dist/contacts/index.js"
   },
   "scripts": {
     "build": "tsc",

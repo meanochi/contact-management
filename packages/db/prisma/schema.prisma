@@ -32,15 +32,16 @@ model Domain {
   updatedAt DateTime @updatedAt
 
   supportedBodies SupportedBodyOnDomain[]
+  contactLinks    ContactOnSupportedBodyDomain[]
 }
 
 // Story 1.2. companyId (ח"פ) is the natural business key — @unique at the DB
 // level, not just app-level, so a race can't bypass it. Many-to-many with
 // Domain (a body can belong to more than one domain — product decision).
 //
-// `contacts`/`registrationRequests` back-relations are NOT declared yet —
-// Contact (Story 1.5) and RegistrationRequest (Epic 2) don't exist in this
-// schema yet. Add them here when those models are introduced, not before.
+// `registrationRequests` back-relation is NOT declared yet — RegistrationRequest
+// (Epic 2) doesn't exist in this schema yet. Add it here when that model is
+// introduced, not before.
 model SupportedBody {
   id        String   @id @default(cuid())
   companyId String   @unique @map("company_id") // ח"פ
@@ -49,7 +50,8 @@ model SupportedBody {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  domains SupportedBodyOnDomain[]
+  domains  SupportedBodyOnDomain[]
+  contacts ContactOnSupportedBody[]
 }
 
 // Explicit join model, not an implicit m2m — auditable like any other model,
@@ -63,5 +65,86 @@ model SupportedBodyOnDomain {
   domain        Domain        @relation(fields: [domainId], references: [id])
 
   @@id([supportedBodyId, domainId])
+  @@index([domainId])
+}
+
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Story 1.7: which channel an out-of-system update/removal request came in on.
+enum ExternalRequestSource {
+  PHONE
+  EMAIL
+  OTHER
+}
+
+// Story 1.5. firstName/lastName kept separate (not one `fullName` column) —
+// product decision, confirmed with Rachel: the create form collects them as
+// two distinct inputs. idNumber (ת"ז) is optional free text, not validated
+// against a checksum — not required by any AC. No direct domainId column: a
+// Contact never picks a domain outright — it's always a subset of whichever
+// SupportedBody(ies) it's linked to actually carry (revised post-1.6: see
+// ContactOnSupportedBodyDomain below — a multi-domain body's contact isn't
+// necessarily the contact person for *every* one of that body's domains).
+model Contact {
+  id         String        @id @default(cuid())
+  firstName  String        @map("first_name")
+  lastName   String        @map("last_name")
+  idNumber   String?       @map("id_number")
+  role       String?
+  emails     String[]      @default([]) // FR-10: more than one address is supported per contact
+  phone      String?
+  notes      String?
+  emailOptIn Boolean       @default(false) @map("email_opt_in")
+  smsOptIn   Boolean       @default(false) @map("sms_opt_in")
+  status     ContactStatus @default(ACTIVE)
+  deactivatedAt DateTime?  @map("deactivated_at")
+  // Story 1.7: required together whenever the status change came from outside the app (phone/email) rather than the UI itself.
+  externalRequestSource ExternalRequestSource? @map("external_request_source")
+  externalRequestDate   DateTime?              @map("external_request_date")
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  supportedBodies ContactOnSupportedBody[]
+
+  @@index([status])
+}
+
+// Explicit join model, not an implicit m2m: a Contact can be linked to more
+// than one SupportedBody (Story 1.6), and this makes the relation auditable
+// like any other model.
+model ContactOnSupportedBody {
+  contactId       String   @map("contact_id")
+  supportedBodyId String   @map("supported_body_id")
+  createdAt       DateTime @default(now())
+
+  contact       Contact       @relation(fields: [contactId], references: [id])
+  supportedBody SupportedBody @relation(fields: [supportedBodyId], references: [id])
+  domains       ContactOnSupportedBodyDomain[]
+
+  @@id([contactId, supportedBodyId])
+  @@index([supportedBodyId])
+}
+
+// Post-1.6 revision (confirmed with Rachel): a SupportedBody can carry more
+// than one Domain, but the Contact representing it might only be "the
+// contact person" for some of them, not all — e.g. a body spanning חינוך +
+// בריאות where this particular contact only handles חינוך. The UI
+// pre-selects every domain of the chosen SupportedBody and lets the user
+// deselect some; the Service layer enforces that whatever's submitted stays
+// a *subset* of that SupportedBody's own domains (never a domain the body
+// itself isn't in) — that's the actual intent of the original "a contact
+// never picks a domain outright" product decision, not a full reversal of it.
+model ContactOnSupportedBodyDomain {
+  contactId       String @map("contact_id")
+  supportedBodyId String @map("supported_body_id")
+  domainId        String @map("domain_id")
+
+  contactOnSupportedBody ContactOnSupportedBody @relation(fields: [contactId, supportedBodyId], references: [contactId, supportedBodyId])
+  domain                 Domain                 @relation(fields: [domainId], references: [id])
+
+  @@id([contactId, supportedBodyId, domainId])
   @@index([domainId])
 }

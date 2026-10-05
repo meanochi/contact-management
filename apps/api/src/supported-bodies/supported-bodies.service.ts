@@ -119,6 +119,17 @@ export class SupportedBodiesService {
           await tx.supportedBodyOnDomain.createMany({
             data: input.domainIds.map((domainId: string) => ({ supportedBodyId: id, domainId })),
           });
+
+          // Bug found by Rachel: ContactOnSupportedBodyDomain (a Contact's
+          // domain *subset* for this body — post-1.6 revision) is a separate
+          // table with no FK/cascade back to SupportedBodyOnDomain. Removing
+          // a domain here left every Contact's subset still referencing it —
+          // orphaned, and still matched by domainId search filters even
+          // though the body itself no longer has that domain. Clean it up in
+          // the same transaction, for every Contact linked to this body.
+          await tx.contactOnSupportedBodyDomain.deleteMany({
+            where: { supportedBodyId: id, domainId: { notIn: input.domainIds } },
+          });
         }
 
         const domains = await tx.supportedBodyOnDomain.findMany({

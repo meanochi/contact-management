@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
 import { TextInput, Button, Stack, Alert, Anchor, Drawer, Group, Modal, Text } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { updateSupportedBodySchema } from "@contact-management/shared-schemas/supported-bodies";
 import type { SupportedBodyDto } from "@contact-management/shared-schemas/supported-bodies";
 import { DomainMultiSelect } from "@contact-management/ui";
 import { useListActiveDomainsQuery } from "@/lib/api/domainsApi";
 import { useUpdateSupportedBodyMutation } from "@/lib/api/supportedBodiesApi";
+import { ContactForm } from "@/components/contacts/ContactForm";
 
 interface ApiErrorBody {
   error?: {
@@ -39,6 +41,11 @@ export function SupportedBodyEditDrawer({
     null,
   );
   const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
+  // Story 1.5 — "add a contact" entry point, pre-filled with this body's id
+  // (the AC's "פותח מתוך מסך גוף נתמך, משויך אוטומטית" case). There's no
+  // dedicated per-body detail page yet, so this edit Drawer is the closest
+  // thing to "a specific supported body's screen" — confirmed with Rachel.
+  const [addingContact, setAddingContact] = useState(false);
 
   const {
     control,
@@ -59,6 +66,7 @@ export function SupportedBodyEditDrawer({
     if (supportedBody) {
       reset({ name: supportedBody.name, companyId: supportedBody.companyId, domainIds: supportedBody.domainIds });
       setConflict(null);
+      setAddingContact(false);
     }
   }, [supportedBody, reset]);
 
@@ -82,21 +90,32 @@ export function SupportedBodyEditDrawer({
         }
         return;
       }
-      setConflict({ message: "שמירה נכשלה — נסה/י שוב" }); // generic fallback, UX-DR16-style
+      // Generic/unexpected failure → toast (UX-DR16, EXPERIENCE.md "שמירה נכשלה"
+      // row — applies to every form). Form values are untouched (no reset()
+      // on this path), so the user can just retry.
+      notifications.show({ color: "red", title: "שגיאה", message: "שמירה נכשלה — נסה/י שוב" });
     }
   });
 
   const handleDeactivate = async () => {
-    await updateSupportedBody({ id: supportedBody.id, input: { isActive: false } }).unwrap();
-    setConfirmingDeactivate(false);
-    onClose();
+    try {
+      await updateSupportedBody({ id: supportedBody.id, input: { isActive: false } }).unwrap();
+      setConfirmingDeactivate(false);
+      onClose();
+    } catch {
+      notifications.show({ color: "red", title: "שגיאה", message: "השבתה נכשלה — נסה/י שוב" });
+    }
   };
 
   // Reactivating isn't destructive the way deactivating is (no AC called
   // for a confirm step here), so it applies directly — no Modal.
   const handleActivate = async () => {
-    await updateSupportedBody({ id: supportedBody.id, input: { isActive: true } }).unwrap();
-    onClose();
+    try {
+      await updateSupportedBody({ id: supportedBody.id, input: { isActive: true } }).unwrap();
+      onClose();
+    } catch {
+      notifications.show({ color: "red", title: "שגיאה", message: "הפעלה מחדש נכשלה — נסה/י שוב" });
+    }
   };
 
   return (
@@ -138,13 +157,17 @@ export function SupportedBodyEditDrawer({
               )}
             />
 
+            <Button type="button" variant="default" onClick={() => setAddingContact(true)}>
+              הוסף איש קשר
+            </Button>
+
             <Group justify="space-between" mt="md">
               {supportedBody.isActive ? (
-                <Button color="red" variant="subtle" onClick={() => setConfirmingDeactivate(true)}>
+                <Button type="button" color="red" variant="subtle" onClick={() => setConfirmingDeactivate(true)}>
                   השבת
                 </Button>
               ) : (
-                <Button color="green" variant="subtle" onClick={handleActivate} loading={isSaving}>
+                <Button type="button" color="green" variant="subtle" onClick={handleActivate} loading={isSaving}>
                   הפעל מחדש
                 </Button>
               )}
@@ -172,6 +195,15 @@ export function SupportedBodyEditDrawer({
           </Group>
         </Stack>
       </Modal>
+
+      <Drawer
+        opened={addingContact}
+        onClose={() => setAddingContact(false)}
+        position="left"
+        title="איש קשר חדש"
+      >
+        <ContactForm defaultSupportedBodyId={supportedBody.id} onSuccess={() => setAddingContact(false)} />
+      </Drawer>
     </>
   );
 }

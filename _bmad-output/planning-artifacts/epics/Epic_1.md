@@ -208,9 +208,20 @@ _[DRAFT — טרם אושר סופית]_
 
 **⚠️ מגבלת אימות:** בדקתי build/typecheck/lint/test (ירוק) ו-SSR בפועל מול שרת רץ (הכותרת, הכפתור ושדה החיפוש מופיעים נכון). **לא בדקתי ויזואלית בדפדפן** — אין כלי browser automation זמין; לא אומת החיפוש-תוך-הקלדה, הדפדוף (pagination), או מעברי המסך בפועל מול עין אנושית.
 
+### 🐛 תיקון לאחר השלמה (דווח ע"י Rachel): חסר סינון תחום/סטטוס ב-UI
+
+**הבעיה:** ה-AC דורש במפורש "הרשימה מציגה רק גופים נתמכים המשויכים לתחום שנבחר... ו/או בסטטוס שנבחר". השרת (`domainId`/`isActive` ב-`GET /supported-bodies`) נבנה ונבדק נכון מההתחלה — אבל **ב-UI מעולם לא נוספו בקרות סינון** עבור תחום/סטטוס, רק שדה חיפוש. זו סטייה אמיתית מה-AC שלא תפסתי בזמנו, לא רק פער קטן — פספוס שלי.
+
+**התיקון:** נוספו שני `Select` ל-`SupportedBodiesList.tsx` — "תחום" (מתוך `useListActiveDomainsQuery`) ו-"סטטוס" (פעיל/לא פעיל), לצד שדה החיפוש הקיים. ה-EmptyState מבדיל עכשיו בין "אין תוצאות תואמות" (כשיש סינון פעיל) ל"אין עדיין גופים נתמכים" (רשימה ריקה לגמרי) — אותו pattern שכבר נבנה ב-`ContactsList` (Story 1.8). אומת: build/typecheck/lint ירוק, SSR מאשר שהבקרות מופיעות, וסינון `domainId`/`isActive` בשרת כבר אומת קודם (לא השתנה).
+
 ---
 
 ## Story 1.5: יצירת רשומת איש קשר
+
+**⚠️ החלטות שהתקבלו עם Rachel לפני הבנייה (סתירות שנמצאו בין ה-AC, ה-PRD, וה-skill):**
+1. **שם**: ה-AC סתר את עצמו (שורה 222 — "שם פרטי, שם משפחה" מול שורה 233 — "שם מלא"), וה-PRD (FR-6) כתב רק "שם" כללי. הוכרע: **שני שדות נפרדים** — `firstName`/`lastName` (לא `fullName`) — עודכן גם ב-skill (`expertise-postgres-prisma`).
+2. **תעודת זהות**: לא הופיע בכלל ב-PRD/בסכמה המתועדת. הוכרע: **מתווסף** כשדה חדש (`idNumber`, אופציונלי, טקסט חופשי ללא בדיקת תקינות) — עודכן גם ב-skill.
+3. **נקודת כניסה ליצירת איש קשר**: בזמן הבנייה לא היה עדיין לא "מסך גוף נתמך ספציפי" ולא "מסך אנשי קשר כללי" (שני התרחישים שה-AC מניח). הוכרע (לאחר דיון): לבנות **דף `/contacts` מלא בדומה לדף הגופים הנתמכים** (רשימה + יצירה), עם ניווט בין הדפים ב-`AppShell` — ראו הערת scope בתחתית הסטורי.
 
 בתור מי שנכנס למערכת,
 אני רוצה ליצור רשומת איש קשר חדשה ולשייך אותה לגוף נתמך קיים,
@@ -237,21 +248,31 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **DB:**
-- [ ] מודל `Contact` (fullName, role, emails\[\], phone, notes, emailOptIn, smsOptIn, status, timestamps — **ללא** שדה תחום ישיר) + מודל `ContactOnSupportedBody` + מיגרציה
+- [x] מודל `Contact` (firstName, lastName, idNumber, role, emails\[\], phone, notes, emailOptIn, smsOptIn, status, deactivatedAt, externalRequestSource, externalRequestDate, timestamps — **ללא** שדה תחום ישיר) + מודל `ContactOnSupportedBody` + מיגרציה (`add_contact`). שדות `deactivatedAt`/`externalRequestSource`/`externalRequestDate` נוספו כבר עכשיו (לא בשימוש עד Story 1.7) לפי דרישת Story 1.7's task list המפורשת ("השדות שהוגדרו כבר במודל Contact ב-Story 1.5")
 
 **שרת: פקודות ו-API:**
-- [ ] `packages/shared-schemas/contacts/{types.ts,schema.ts}` — `createContactSchema` (`emails` כמערך, לפחות איבר אחד; `supportedBodyId` חובה)
-- [ ] `apps/api/src/contacts/` — `contacts.module.ts` + `contacts.controller.ts` (`POST /contacts` עם `JoiValidationPipe(createContactSchema)`) + `contacts.service.ts` — `createContact` (יוצרת `Contact` + `ContactOnSupportedBody` יחד)
+- [x] `packages/shared-schemas/contacts/{types.ts,schema.ts}` — `createContactSchema` (`emails` כמערך של כתובות תקינות, לפחות איבר אחד; `supportedBodyId` חובה). גם `listContactsQuerySchema` בסיסי (page/pageSize בלבד — ללא סינון, זה Story 1.8)
+- [x] `apps/api/src/contacts/` — `contacts.module.ts` + `contacts.controller.ts` (`POST /contacts` + `GET /contacts` עם `JoiValidationPipe`) + `contacts.service.ts` — `create` (יוצרת `Contact` + `ContactOnSupportedBody` יחד בטרנזקציה) + `list` (ברירת מחדל `status: 'ACTIVE'` לפי `expertise-postgres-prisma`, גם שעדיין אין שום דרך ליצור INACTIVE)
 
 **UI:**
-- [ ] קומפוננטת `SupportedBodySelect` משותפת ב-`packages/ui` (Select/Combobox עם חיפוש, טוענת דרך `apps/web/lib/api-client.ts` מ-`GET /supported-bodies`), לשימוש חוזר ב-Story 1.6 (שיוך לגוף נוסף)
-- [ ] `apps/web/components/contacts/ContactForm.tsx` — RHF, שדה `SupportedBodySelect` (חובה), שדה-מערך דינמי לכתובות דוא"ל ("הוסף כתובת נוספת")
-- [ ] טרום-מילוי גוף נתמך כשהטופס נפתח ממסך גוף נתמך ספציפי (השדה נשאר ניתן לשינוי)
-- [ ] `useCreateContactMutation` (RTK Query, מול `apps/api`) + invalidation
+- [x] קומפוננטת `SupportedBodySelect` משותפת ב-`packages/ui` (Select עם חיפוש, פרזנטיישנית כמו `DomainMultiSelect`), לשימוש חוזר ב-Story 1.6
+- [x] `apps/web/components/contacts/ContactForm.tsx` — RHF, שדה `SupportedBodySelect` (חובה), שדה-מערך דינמי לכתובות דוא"ל ("הוסף כתובת נוספת" / "הסר") — מנוהל ישירות כ-`string[]` (לא `useFieldArray`) כדי להשתמש **באותה סכמת Joi בדיוק** גם בטופס וגם בשרת
+- [x] טרום-מילוי גוף נתמך (`defaultSupportedBodyId`) — מחובר כפתור "הוסף איש קשר" בתוך `SupportedBodyEditDrawer` (ר' החלטה 3 למעלה)
+- [x] `useCreateContactMutation` + `useListContactsQuery` (RTK Query, מול `apps/api`) + invalidation תגית `Contact`
+
+**תוספת scope (לא בתכנון המקורי של הסטורי, הוחלט עם Rachel):**
+- [x] `apps/web/components/contacts/{ContactsList.tsx,ContactsScreen.tsx}` + `app/(internal)/contacts/page.tsx` — דף `/contacts` מלא, במבנה זהה ל-`/supported-bodies` (רשימה + Skeleton + EmptyState + Pagination + Drawer יצירה), **ללא** חיפוש/סינון (זה Story 1.8 — אותו יחס בדיוק שהיה בין Story 1.2 ל-Story 1.4)
+- [x] `AppShell.tsx` — נוספו קישורי ניווט (`NavLink`+Next `Link`) בין "גופים נתמכים" ל"אנשי קשר", עם מצב active לפי `usePathname`
+
+**⚠️ אימות:** `build`/`typecheck`/`lint`/`test` — 18/18 ירוק. אומת end-to-end מול שרת API רץ בפועל: יצירת איש קשר עם שתי כתובות דוא"ל ותעודת זהות (עברית, דרך קובץ — לא CLI inline), הופעתו ב-GET, שגיאות ולידציה (שדות חובה חסרים, פורמט דוא"ל לא תקין כולל path `emails.0` הממופה נכון ל-`setError("emails", ...)` בטופס, מערך דוא"ל ריק). SSR אומת ששני הדפים עולים וקישורי הניווט מופיעים בשניהם. רשומת הבדיקה נוקתה בסוף. **מגבלה זהה לקודם:** אין כלי browser automation — מילוי הטופס בפועל, "הוסף כתובת נוספת", ולחיצה על "הוסף איש קשר" מתוך Drawer העריכה לא אומתו ויזואלית.
 
 ---
 
 ## Story 1.6: עריכת איש קשר ושיוך לגופים נתמכים נוספים
+
+**⚠️ החלטות שהתקבלו עם Rachel לפני הבנייה:**
+1. **שדות העריכה**: ה-AC מפרט "תפקיד/טלפון/דוא\"ל/הערות/העדפות ערוץ" בלבד. אושר: **רק** השדות האלה ניתנים לעריכה בסטורי זו — שם פרטי/שם משפחה/תעודת זהות **לא** ניתנים לעריכה כאן (מוצגים read-only), ושיוך הגוף הנתמך הראשון גם הוא לא משתנה כאן (רק הוספת גוף **נוסף** דרך endpoint נפרד).
+2. **Toast (UX-DR16)**: גילינו תוך כדי בנייה ש-`EXPERIENCE.md` מגדיר "שמירה נכשלה → Notification (toast)" ככלל שחל על **כל טופס**, לא רק על עריכת איש קשר — אבל שלושת הטפסים הקודמים (Story 1.2/1.3/1.5) השתמשו בהודעה מוטבעת (`Alert`/`Text`) במקום. אושר: **לתקן גם אותם** ל-toast, לא רק את הטופס החדש — ראו הערת scope בתחתית הסטורי. הותקן `@mantine/notifications` (לא היה בפרויקט קודם), מורכב ב-`app/layout.tsx`.
 
 בתור מי שנכנס למערכת,
 אני רוצה לערוך פרטי איש קשר קיים ולשייך אותו ליותר מגוף נתמך אחד,
@@ -278,15 +299,21 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **שרת: פקודות ו-API:**
-- [ ] `apps/api/src/contacts/contacts.controller.ts` — מתווסף `PATCH /contacts/:id` עם `JoiValidationPipe(updateContactSchema)`
-- [ ] Endpoint לשיוך גוף נתמך נוסף — `POST /contacts/:id/supported-bodies` עם `{ supportedBodyId }` (יחס Contact↔SupportedBody הוא many-to-many — ר' decision rule ב-`expertise-api-rest`)
-- [ ] `contacts.service.ts` — `updateContact` + `addSupportedBodyToContact`
+- [x] `apps/api/src/contacts/contacts.controller.ts` — מתווסף `PATCH /contacts/:id` עם `JoiValidationPipe(updateContactSchema)` (role/phone/emails/notes/emailOptIn/smsOptIn בלבד — ר' החלטה 1)
+- [x] Endpoint לשיוך גוף נתמך נוסף — `POST /contacts/:id/supported-bodies` עם `{ supportedBodyId }` (`POST` לא `PUT` — שיוך כפול הוא קונפליקט (409), לא no-op, לפי decision rule ב-`expertise-api-rest`)
+- [x] `contacts.service.ts` — `update` + `addSupportedBody` (409 אם הגוף כבר משויך, 404 אם הרשומה לא קיימת)
 
 **UI:**
-- [ ] `apps/web/components/contacts/ContactEditDrawer.tsx` — נפתח משמאל (כיוון "תוכן", UX-DR7), לחיצה על שורה פותחת אותו (UX-DR11)
-- [ ] רכיב "שייך לגוף נתמך נוסף" בתוך ה-Drawer, משתמש ב-`SupportedBodySelect` (Story 1.5)
-- [ ] טיפול בכשל שמירה: `Notification` (toast) עם שמירת נתוני הטופס (UX-DR16)
-- [ ] `useUpdateContactMutation` + `useAddSupportedBodyMutation` (RTK Query, מול `apps/api`)
+- [x] `apps/web/components/contacts/ContactEditDrawer.tsx` — נפתח משמאל (כיוון "תוכן", UX-DR7), לחיצה על שורה פותחת אותו (UX-DR11, מחובר ב-`ContactsList`)
+- [x] רכיב "שייך לגוף נתמך נוסף" בתוך ה-Drawer, משתמש ב-`SupportedBodySelect` (Story 1.5) — מסנן גופים כבר-משויכים מרשימת האפשרויות (UX; מונע את מקרה ה-409 מראש)
+- [x] טיפול בכשל שמירה: `Notification` (toast) עם שמירת נתוני הטופס (UX-DR16) — `@mantine/notifications` הותקן ומורכב גלובלית
+- [x] `useUpdateContactMutation` + `useAddSupportedBodyMutation` (RTK Query, מול `apps/api`)
+
+**תוספת scope (הוחלט עם Rachel — ר' החלטה 2 למעלה):**
+- [x] תוקנו `SupportedBodyForm.tsx`, `SupportedBodyEditDrawer.tsx`, `ContactForm.tsx` — הודעת הכשל הגנרית (לא CONFLICT, לא per-field) הוחלפה מ-Alert/Text מוטבע ל-`notifications.show(...)`. גם `handleDeactivate`/`handleActivate` ב-`SupportedBodyEditDrawer` קיבלו טיפול שגיאה (toast) — לא היה להם בכלל קודם (קריאה ללא try/catch)
+- [x] **באג אמיתי שנמצא ותוקן תוך כדי**: כפתורים משניים בתוך `<form>` (למשל "השבת"/"הפעל מחדש"/"הוסף איש קשר"/"הוסף כתובת נוספת"/"הסר") לא הוגדרו עם `type="button"` — ברירת המחדל של HTML היא `type="submit"`, כך שלחיצה עליהם עלולה הייתה גם לשלוח את הטופס בטעות. תוקן בכל המקומות הקיימים (`SupportedBodyEditDrawer`, `ContactForm`) וביושם נכון מההתחלה ב-`ContactEditDrawer` החדש
+
+**⚠️ אימות:** `build`/`typecheck`/`lint`/`test` — 18/18 ירוק. אומת end-to-end מול שרת API רץ: עדכון role/phone/emails/notes/prefs (עברית, דרך קובץ), שגיאת ולידציה על body ריק, 404 על id לא קיים, שיוך לגוף נתמך שני (מופיע ב-GET), שגיאת 409 בניסיון שיוך כפול (גם לגוף השני וגם לראשון). SSR אומת ששני הדפים עדיין עולים (200) אחרי התקנת `@mantine/notifications`. רשומת הבדיקה נוקתה. **מגבלה זהה לקודם:** אין כלי browser automation — התראות ה-toast בפועל, לחיצה על שורה, ומילוי הטופס לא אומתו ויזואלית בדפדפן.
 
 ---
 
@@ -317,20 +344,26 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **DB:**
-- [ ] אימות ששדות `externalRequestSource`/`externalRequestDate` (שהוגדרו כבר במודל `Contact` ב-Story 1.5) זמינים ל-update — אין שינוי סכמה נוסף נדרש
+- [x] אומת ששדות `externalRequestSource`/`externalRequestDate` (שהוגדרו כבר במודל `Contact` ב-Story 1.5) זמינים ל-update — אין שינוי סכמה נוסף נדרש. אומת ישירות מול ה-DB: שני השדות וגם `deactivatedAt`/`status` נכתבים נכון
 
 **שרת: פקודות ו-API:**
-- [ ] `apps/api/src/contacts/contacts.controller.ts` — מתווסף `POST /contacts/:id/deactivate` (action endpoint) עם `{ source, date }` חובה יחד (Joi: שניהם נדרשים ביחד, לא שדות אופציונליים נפרדים)
-- [ ] `contacts.service.ts` — `deactivateContact(contactId, source, date)` — מעדכנת `status: 'INACTIVE'`, `deactivatedAt`, `externalRequestSource`, `externalRequestDate`
+- [x] `apps/api/src/contacts/contacts.controller.ts` — מתווסף `POST /contacts/:id/deactivate` (action endpoint, לא PATCH — מעבר מצב עם תיעוד חובה, per decision rule ב-`expertise-api-rest`) עם `{ source, date }` חובה יחד
+- [x] `contacts.service.ts` — `deactivate(id, source, date)` — מעדכנת `status: 'INACTIVE'`, `deactivatedAt: now()` (מתי בוצעה הפעולה באפליקציה), `externalRequestSource`, `externalRequestDate` (מתי התקבלה הבקשה בפועל — יכול להיות תאריך עבר, מוזן ע"י המשתמש)
 
 **UI:**
-- [ ] `apps/web/components/contacts/MarkInactiveModal.tsx` — Mantine `Modal`, `Select` למקור + בורר תאריך, כפתור אישור מושבת עד ששניהם תקינים (UX-DR13)
-- [ ] חיבור כפתור "סמן כלא פעיל" בתוך `ContactEditDrawer` (Story 1.6) לפתיחת ה-Modal
-- [ ] `useDeactivateContactMutation` (RTK Query, מול `apps/api`)
+- [x] `apps/web/components/contacts/MarkInactiveModal.tsx` — Mantine `Modal`, `Select` למקור (PHONE/EMAIL/OTHER) + `DateInput` מ-`@mantine/dates` (ספרייה חדשה, הותקנה + מורכבת ב-`layout.tsx` עם `DatesProvider` ולוקאל עברי), כפתור "אישור וסימון" מושבת עד ששניהם נבחרו (UX-DR13)
+- [x] חיבור כפתור "סמן כלא פעיל" בתוך `ContactEditDrawer` (Story 1.6) — מוצג רק כש-`status === 'ACTIVE'`; בהצלחה סוגר גם את ה-Modal וגם את ה-Drawer כולו (הרשומה כבר לא תופיע ברשימת ברירת המחדל)
+- [x] `useDeactivateContactMutation` (RTK Query, מול `apps/api`) + invalidation תגית `Contact`
+
+**⚠️ אימות:** `build`/`typecheck`/`lint`/`test` — 18/18 ירוק. אומת end-to-end מול שרת API רץ: שגיאת ולידציה על body ריק, שגיאה על ערך `source` לא תקין (לא אחד מ-PHONE/EMAIL/OTHER), השבתה מוצלחת, איפוס הרשומה מרשימת ברירת המחדל (`GET /contacts` מחזיר ריק אחרי), 404 על id לא קיים, ואימות ישיר מול ה-DB ש-`deactivatedAt`/`externalRequestSource`/`externalRequestDate` נשמרו נכון. SSR אומת ששני הדפים עדיין עולים (200) אחרי התקנת `@mantine/dates`. רשומת הבדיקה נוקתה. **מגבלה זהה לקודם:** אין כלי browser automation — פתיחת ה-Modal, בחירת תאריך מה-calendar picker, ולחיצת הכפתורים לא אומתו ויזואלית.
 
 ---
 
 ## Story 1.8: חיפוש וסינון אנשי קשר
+
+**⚠️ החלטות שהתקבלו עם Rachel לפני הבנייה:**
+1. **ContactsList — Server Component או Client Component?** המשימה כאן כתובה במפורש "Server Component" (ה-pattern הקנוני), אבל `SupportedBodiesList.tsx` (Story 1.4, מאושרת וקיימת) נבנתה כ-Client Component — סטייה מתועדת מה-pattern הקנוני (`ARCHITECTURE-SPINE.md` AD-2), לא טעות. בדקתי את שני מסמכי הדרישות המקוריים (`מסמך דרישות - ניהול תקשורת עם הגופים`, סעיף CM-7, ואת `פיצ'ר ניהול אנשי קשר לגוף נתמך`) — אף אחד מהם לא דורש סינון הניתן לשיתוף-קישור/ששורד רענון דף, זו רק דרישה טכנית-ארכיטקטונית, לא דרישת מוצר. **הוחלט**: להמשיך באותה שיטה (Client Component), עקבי עם `SupportedBodiesList`, ולא לפתוח סטייה שנייה נפרדת רק במסך הזה.
+2. **שם הפרמטר**: `status=` (כפי שמופיע במשימת ה-controller למטה) הוחלף ב-`includeInactive` (בוליאני) — תואם את ה-AC בפועל ("checkbox 'כלול לא פעילים'") ואת אותו pattern שכבר נקבע ל-`isActive` של SupportedBody (Story 1.4). `status=` בטקסט המשימה המקורי היה ניסוח רופף, לא דרישה נפרדת.
 
 בתור מי שנכנס למערכת,
 אני רוצה לחפש ולסנן אנשי קשר לפי גוף נתמך, תחום, סטטוס, ושנת עדכון אחרונה,
@@ -357,19 +390,92 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **שרת: פקודות ו-API:**
-- [ ] `apps/api/src/contacts/contacts.controller.ts` — מתווסף `GET /contacts?search=&supportedBodyId=&domainId=&status=&updatedYear=` + `JoiValidationPipe` על ה-query; `domainId` מסנן דרך `supportedBodies: { some: { supportedBody: { domains: { some: { domainId } } } } }`
-- [ ] ברירת מחדל ב-`contacts.service.ts`: `status: 'ACTIVE'` אלא אם `includeInactive=true` (עקרון "ברירת מחדל פעילים בלבד" מ-`expertise-postgres-prisma`)
+- [x] `apps/api/src/contacts/contacts.controller.ts` — `GET /contacts?search=&supportedBodyId=&domainId=&includeInactive=&updatedYear=` + `JoiValidationPipe` על ה-query; `domainId` מסנן דרך `supportedBodies: { some: { supportedBody: { domains: { some: { domainId } } } } }`
+- [x] ברירת מחדל ב-`contacts.service.ts`: `status: 'ACTIVE'` אלא אם `includeInactive=true` (עקרון "ברירת מחדל פעילים בלבד" מ-`expertise-postgres-prisma`)
+- [x] **באג אמיתי שנמצא ותוקן תוך כדי**: `supportedBodyId` ו-`domainId` שניהם מגיעים דרך אותו relation (`supportedBodies`) — פיזור שני `{supportedBodies:{...}}` נפרדים לאותו object literal היה גורם לשני דורס ראשון בשקט (אותו מפתח פעמיים). מוזגו ל-`some` אחד, כך שכששני הפילטרים פעילים יחד הם נבדקים על אותו שיוך, לא שני שיוכים שונים בטעות. אומת מפורשות בבדיקה (קומבינציה לא-תואמת → ריק, קומבינציה תואמת → תוצאה נכונה)
 
 **UI:**
-- [ ] `ContactsList.tsx` (Server Component, שליפה ראשונית דרך `apps/web/lib/api-client.ts`) + client filter toolbar (חיפוש debounced, checkbox "כלול לא פעילים", פילטרי גוף/תחום/שנה)
-- [ ] Pagination + `Skeleton` לטעינה ראשונית + Empty State עם CTA "הוספת איש קשר ראשון" כשהרשימה ריקה
-- [ ] `useListContactsQuery` (RTK Query, מול `apps/api`) לסינון בצד הלקוח
+- [x] `ContactsList.tsx` — Client Component (ר' החלטה 1 למעלה) + toolbar סינון (חיפוש debounced ~300ms, checkbox "כלול לא פעילים", Select לגוף/תחום/שנה — 6 שנים אחרונות)
+- [x] Pagination + `Skeleton` לטעינה ראשונית + Empty State — הודעה/CTA שונים כשיש פילטרים פעילים ("אין תוצאות תואמות") לעומת רשימה ריקה לגמרי ("הוספת איש קשר ראשון")
+- [x] `useListContactsQuery` (RTK Query, מול `apps/api`) לסינון בצד הלקוח
+
+**⚠️ אימות:** `build`/`typecheck`/`lint`/`test` — 18/18 ירוק. אומת end-to-end מול שרת API רץ עם שני אנשי קשר על שני גופים/תחומים שונים (אחד הושבת): ברירת מחדל (רק פעיל), `includeInactive=true` (שניהם), חיפוש, סינון גוף נתמך, סינון תחום (כולל קומבינציה עם גוף נתמך — שני מקרים: תואם ולא-תואם), סינון שנה (שנה נוכחית מול 2020), ושגיאת ולידציה על ערך בוליאני לא תקין. SSR אומת שכל רכיבי ה-toolbar מופיעים בדף. רשומות הבדיקה נוקו. **מגבלה זהה לקודם:** אין כלי browser automation — ההקלדה עם debounce, בחירת הפילטרים מה-Select-ים, ומעברי המסך לא אומתו ויזואלית.
+
+---
+
+### 🐛 תיקון לאחר השלמה (דווח ע"י Rachel): "הערות" חסם שמירה כשריק
+
+**הבעיה:** `Joi.string().optional()` לא מאפשר מחרוזת ריקה (`""`) — רק מאפשר **שהשדה לא יישלח בכלל**. אבל טופס RHF תמיד שולח את כל השדות, כולל שדות טקסט ריקים (ערך ברירת מחדל `""`, לא `undefined`). התוצאה: כל שדה אופציונלי בטופס שנשאר ריק (הערות, ת"ז, תפקיד, טלפון) חסם שמירה עם שגיאת "is not allowed to be empty" — למרות שהשדה מוגדר `optional()`.
+
+**התיקון (גרסה סופית):** `packages/shared-schemas/src/contacts/schema.ts` — `idNumber`/`role`/`phone`/`notes` ב-create/update עברו ל-`.allow("")` (לא `.empty("")`): מחרוזת ריקה עוברת ולידציה בהצלחה ומגיעה ל-Service כ-`""` בפועל, לא נמחקת משם. ב-`apps/api/src/contacts/contacts.service.ts` נוספה פונקציית עזר `blankToNull()` שממירה `""` ל-`null` בזמן הכתיבה ל-DB — כך שגם יצירה וגם עריכה עם שדה ריק שומרות `null`, **וגם** ניקוי של שדה שכבר היה לו ערך קודם (למשל מחיקת הערה קיימת ב-Drawer העריכה) נשמר בפועל, לא מתעלם ממנו. אומת end-to-end: יצירה עם שדות ריקים, עריכה שמנקה הערה קיימת (אומת ב-GET שחוזר `null`, לא הטקסט הישן), ועריכה שמחליפה הערה בטקסט חדש — שלושתם עובדים נכון.
+
+**בדיקה נוספת**: אין בעיה מקבילה ב-`SupportedBody` — השדות שם (`name`/`companyId`) הם שדות-חובה מהותיים (לא "אופציונליים ריקים"), אז דחיית מחרוזת ריקה שם היא התנהגות נכונה, לא אותו באג.
+
+---
+
+### ✨ תוספת לאחר השלמה (ביקשה Rachel): הפעלה מחדש לאיש קשר שהושבת
+
+**הבקשה:** Story 1.7 בנתה רק את כיוון ההשבתה — לא הייתה שום דרך להחזיר איש קשר ל-`ACTIVE` אחרי שהושבת. זה מקביל לאותו פער שכבר תוקן עבור `SupportedBody` (ר' החלטה בסטורי 1.3).
+
+**התיקון:**
+- **שרת**: נוסף `POST /contacts/:id/activate` (symmetric ל-`/deactivate`, בלי גוף בקשה — אין תיעוד חובה כמו בהשבתה) ו-`contacts.service.ts` — `activate(id)`. `deactivatedAt`/`externalRequestSource`/`externalRequestDate` **נשארים כפי שהם** (לא מתאפסים) — זה השיא ההיסטורי של ההשבתה האחרונה, עקבי עם דרישת "שמירת מאגר היסטורי" (FR-8/CM-3), לא "ביטול" של מה שקרה.
+- **UI**: `ContactEditDrawer.tsx` — כשהרשומה `INACTIVE`, הכפתור "סמן כלא פעיל" מתחלף ל"הפעל מחדש" (ירוק, ללא Modal אישור — לא הרסני), אותו pattern בדיוק כמו ב-`SupportedBodyEditDrawer`.
+- `useActivateContactMutation` (RTK Query) + invalidation תגית `Contact`.
+
+**⚠️ אימות:** build/typecheck/lint/test — 18/18 ירוק. אומת end-to-end: יצירה→השבתה→הפעלה מחדש→אימות שהרשומה חזרה ל-`ACTIVE` ומופיעה ברשימת ברירת המחדל, ושדות התיעוד ההיסטורי נשארו כפי שהיו (לא התאפסו). 404 על id לא קיים. רשומת הבדיקה נוקתה.
+
+---
+
+### ✨ שינוי משמעותי לאחר השלמה (ביקשה Rachel): שיוך איש קשר לתחום — תת-קבוצה מתוך תחומי הגוף, לא כולם אוטומטית
+
+**הבקשה (עם מוקאפ מצורף):** איש קשר של גוף נתמך רב-תחומי לא בהכרח איש הקשר של **כל** תחומי הגוף. לכן כשבוחרים גוף נתמך (ביצירה או בשיוך לגוף נוסף), צריך גם לבחור אילו מתחומי הגוף איש הקשר הזה מייצג בפועל — ברירת מחדל: כל התחומים מסומנים, עם אפשרות להוריד סימון. גם התבקש: הצגת העדפות דוא"ל/SMS ברשומת איש הקשר ברשימה.
+
+**⚠️ הערה חשובה**: זה הופך בפועל החלטת מוצר שתועדה במפורש ב-Story 1.5 ("איש הקשר אינו בוחר תחום בעצמו — הוא מגיע לתחום/ים דרך התחום/ים של הגוף הנתמך") ובמפת הכיסוי (FR-7: "שיוך לתחום מתבצע ברמת הגוף הנתמך, לא ברמת איש הקשר עצמו"). **הובהר עם Rachel** שהכוונה המקורית של ההחלטה הייתה רק למנוע מאיש קשר לבחור תחום **שלא שייך לגוף שלו בכלל** — לא לשלול ממנו בחירה בתת-קבוצה מתוך תחומי הגוף שכן נבחר. הסייג הזה (subset-only) הוא בדיוק מה שנאכף עכשיו בשרת.
+
+**שינוי סכמת DB:**
+- מודל חדש `ContactOnSupportedBodyDomain` (contactId+supportedBodyId+domainId) — מתעד אילו מתחומי ה-`ContactOnSupportedBody` הספציפי הזה רלוונטיים. FK מורכב (`[contactId, supportedBodyId]`) חזרה ל-`ContactOnSupportedBody`.
+- מיגרציה `contact_supported_body_domains` הורצה. **שתי הרשומות האמיתיות שכבר היו ב-DB (רחל הינמן, מיכל לופיאנסקי) מולאו (backfill) עם כל תחומי הגוף שלהן** — התנהגות זהה למה שהיה קודם (ברירת המחדל "כל התחומים"), כדי לא לאבד מידע.
+
+**שרת:**
+- `CreateContactInput`/`AddSupportedBodyInput` — נוסף `domainIds: string[]` (חובה, לפחות 1). **נאכף שרת-צד**: `domainIds` חייב להיות תת-קבוצה של תחומי ה-`supportedBodyId` שנבחר (לא רק ב-UI) — Joi לא יודע אילו תחומים שייכים לאיזה גוף, אז זו בדיקה נפרדת ב-Service לפני כל כתיבה, מחזירה `VALIDATION_ERROR` אם לא.
+- `ContactDto.supportedBodyIds: string[]` **הוחלף** ב-`supportedBodyLinks: {supportedBodyId, domainIds}[]` — שינוי שובר (breaking), אבל אין עדיין קוד אמיתי שתלוי בצורה הישנה חוץ מהאפליקציה עצמה (עודכנה כולה באותו commit).
+- `GET /contacts?domainId=` — הסינון עבר מ"כל תחומי הגוף המקושר" ל"תת-הקבוצה הספציפית של הקישור" (אחרת הפיצ'ר לא היה משפיע על תוצאות חיפוש בכלל). אומת: איש קשר שהתת-קבוצה שלו **לא** כוללת תחום מסוים, לא מופיע בסינון לפי אותו תחום — גם אם הגוף שלו בכללותו כן שייך אליו.
+
+**UI:**
+- קומפוננטה חדשה `SupportedBodyDomainsPicker` ב-`packages/ui` — pills לבחירה מרובה (Mantine `Chip.Group`), תואם לעיצוב במוקאפ. פרזנטיישנית (AD-11) — הצמצום ל"רק תחומי הגוף שנבחר" קורה ב-`apps/web`, לא בתוך הרכיב.
+- `ContactForm.tsx` — כשנבחר גוף נתמך, ה-picker מופיע עם כל תחומי הגוף מסומנים מראש; משתנה הגוף מאפס ומחדש את הבחירה.
+- `ContactEditDrawer.tsx` — כל שיוך מוצג כבלוק נפרד ("שיוך 1", "שיוך 2"...) עם badges של התחומים שלו (תצוגה בלבד — עריכת תחומים לשיוך **קיים** לא בתחום העבודה הזו, רק בזמן יצירה/הוספת שיוך). אותו picker גם בתוך "שייך לגוף נתמך נוסף".
+- **באג שנמצא ותוקן תוך כדי**: ה-Drawer מחזיק snapshot חד-פעמי של הרשומה (`contact` prop, מגיע מלחיצת השורה) — אחרי "שייך" מוצלח ה-Drawer נשאר פתוח (בניגוד לפעולות אחרות שסוגרות אותו), והתצוגה לא הייתה מתעדכנת עם השיוך החדש בלי לסגור ולפתוח מחדש. תוקן ע"י שימוש בתוצאת ה-mutation עצמה לעדכון התצוגה המקומית.
+- `ContactsList.tsx` — עמודת "גוף נתמך" עודכנה לצורת הנתונים החדשה; נוספה עמודת "ערוצי תקשורת" עם badge לדוא"ל/SMS כשהעדפה מסומנת (הבקשה הנוספת של Rachel).
+
+**⚠️ אימות:** `build`/`typecheck`/`lint`/`test` — 18/18 ירוק. אומת end-to-end מול שרת: יצירה עם תת-קבוצה אמיתית, דחיית תחום שלא שייך לגוף (ביצירה וגם בשיוך נוסף), שיוך לגוף שני עם תת-קבוצה נפרדת, סינון `domainId` לפי תת-קבוצה (לא כל תחומי הגוף) — כולל מקרה שהגוף כן שייך לתחום אבל תת-הקבוצה הספציפית לא. backfill אומת ישירות מול שתי הרשומות האמיתיות. SSR אומת ששני הדפים עדיין עולים. רשומות/שינויי בדיקה נוקו/הוחזרו למצבם המקורי. **מגבלה זהה לקודם:** אין כלי browser automation — בחירת ה-pills, הופעת ה-picker לפי גוף נבחר, ובלוקי "שיוך 1/2" לא אומתו ויזואלית בדפדפן.
+
+### 🐛 תיקון המשך לאחר השלמה (דווח ע"י Rachel): לא ניתן היה לערוך תחומים של שיוך קיים
+
+**הבעיה:** השינוי הקודם אפשר לבחור תת-קבוצת תחומים רק **פעם אחת** — ביצירה או בהוספת שיוך. אחרי זה, אם Rachel רצתה להוסיף/להסיר תחום משיוך שכבר קיים, לא הייתה שום דרך לעשות את זה — תועד כמגבלה ידועה ("עריכת תחומים לשיוך קיים לא בתחום העבודה הזו"), ו-Rachel ביקשה שזה כן יהיה אפשרי.
+
+**התיקון:**
+- **שרת**: `PATCH /contacts/:id/supported-bodies/:supportedBodyId` חדש — `contacts.service.ts`'s `updateSupportedBodyDomains(contactId, supportedBodyId, domainIds)`. 404 אם השיוך לא קיים, אותה בדיקת subset (`assertDomainsBelongToBody`) כמו ביצירה/הוספה, `.min(1)` — אי אפשר לנקות שיוך לאפס תחומים (זה היה מצריך endpoint נפרד ל"ביטול שיוך" לגמרי, לא התבקש). Replace מלא (מחיקה+יצירה), אותו pattern כמו שאר הסנכרונים בפרויקט.
+- **UI**: כל בלוק "שיוך X" ב-`ContactEditDrawer` הפך מתצוגת badges קבועה ל-picker אינטראקטיבי (אותו `SupportedBodyDomainsPicker`) — כפתור "שמירת שינויים בתחומים" מופיע רק כש-יש בפועל שינוי (dirty-check), לא auto-save על כל toggle.
+- `useUpdateSupportedBodyDomainsMutation` (RTK Query) + invalidation.
+
+**⚠️ אימות:** build/typecheck/lint/test — 18/18 ירוק. אומת end-to-end מול **הרשומות האמיתיות של Rachel בפועל**: צמצום שיוך דו-תחומי לתחום אחד, הרחבה בחזרה לשניים, דחיית תחום לא-שייך, דחיית מערך ריק, 404 על שיוך לא קיים — ואז **הוחזר למצב המקורי המדויק**. SSR/שרת בפועל (לא מופע זמני שלי — שרת ה-dev של Rachel התאושש בינתיים ושימש לבדיקה).
+
+### 🐛 תיקון המשך נוסף (דווח ע"י Rachel): הסרת תחום מגוף נתמך לא ניקתה את תת-הקבוצה אצל אנשי הקשר
+
+**הבעיה:** `SupportedBodyOnDomain` (תחומי הגוף עצמו) ו-`ContactOnSupportedBodyDomain` (תת-הקבוצה שאיש קשר מייצג מתוכם) הן שתי טבלאות **עצמאיות לגמרי**, בלי FK/cascade ביניהן. כשעורכים גוף נתמך ומסירים ממנו תחום (ב-`SupportedBodiesList`/`SupportedBodyEditDrawer`), `supported-bodies.service.ts`'s `update()` עדכן רק את `SupportedBodyOnDomain` — ה-`ContactOnSupportedBodyDomain` של כל אנשי הקשר המשויכים נשאר **כפי שהיה**, כעת מצביע על תחום שהגוף כבר לא כולל. Rachel גילתה את זה בניסוי אמיתי: הורידה תחום "חינוך" מגוף, וסינון אנשי קשר לפי "חינוך" המשיך להחזיר איש קשר ששויך לגוף הזה — למרות שהתחום כבר לא קיים שם.
+
+**התיקון:** `supported-bodies.service.ts`'s `update()` — כשמתעדכן `domainIds` של הגוף, מוחק (באותה טרנזקציה) גם כל שורת `ContactOnSupportedBodyDomain` של הגוף הזה שמצביעה על תחום שלא נשאר ברשימה החדשה. מתבצע עבור **כל** אנשי הקשר המשויכים לגוף, לא רק איש קשר ספציפי.
+
+**ניקוי נתונים אמיתיים**: בנוסף לתיקון הקוד, הרצתי script חד-פעמי שסרק את כל השורות הקיימות ומחק שורות יתומות שכבר הצטברו **ברשומות האמיתיות שלך** — נמצאו ונוקו 2 שורות יתומות (רחל הינמן, שני השיוכים שלה).
+
+**⚠️ אימות:** build/typecheck/lint — ירוק. שחזרתי את התרחיש המדויק שדיווחת עליו מול הנתונים האמיתיים: הוספתי בחזרה תחום לגוף, נתתי לשיוך של רחל את אותו תחום, הסרתי את התחום מהגוף שוב — ואימתתי שתת-הקבוצה של רחל התכווצה אוטומטית, וסינון לפי אותו תחום כבר לא מחזיר אותה. המצב הוחזר בדיוק למצב המקורי (רק "בריאות" בשני הגופים) בסיום.
 
 ---
 
 ## כיסוי Epic 1
 
-**FRs:** FR-4 (1.2, 1.3), FR-5 (1.4), FR-6 (1.5, 1.6), FR-7 (1.5 חלקי + 1.6 מלא — שיוך לגוף/גופים נתמכים; שיוך לתחום מתבצע ברמת הגוף הנתמך [Story 1.2], לא ברמת איש הקשר עצמו — החלטת מוצר), FR-8 (1.7), FR-9 (1.7), FR-10 (1.5), FR-11 (1.8).
+**FRs:** FR-4 (1.2, 1.3), FR-5 (1.4), FR-6 (1.5, 1.6), FR-7 (1.5 חלקי + 1.6 מלא — שיוך לגוף/גופים נתמכים; **עודכן לאחר השלמת ה-Epic** — שיוך לתחום הוא תת-קבוצה הנבחרת ברמת איש הקשר מתוך תחומי הגוף הנתמך שאליו שויך (לא כל התחומים אוטומטית, וגם לא בחירה חופשית מכל תחום — ר' הערת השינוי המשמעותי בתחתית Story 1.7/1.8), FR-8 (1.7), FR-9 (1.7), FR-10 (1.5), FR-11 (1.8).
 **NFRs:** NFR-B חלקי (1.1 תשתית — מה/מתי כן, מי לא), NFR-D (1.1 + כל מסך).
 **UX-DRs מכוסים:** UX-DR1, 2, 4, 6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 22, 24.
 **UX-DRs נדחים במפורש ל-Epic 2/3:** UX-DR3, 5, 10, 14, 17, 19, 20, 27 (תלויים בתור בקשות רישום או באכיפת הרשאות בפועל).

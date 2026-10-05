@@ -3,6 +3,7 @@
 import { useForm, Controller } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
 import { TextInput, Button, Stack, Alert, Anchor } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { createSupportedBodySchema } from "@contact-management/shared-schemas/supported-bodies";
 import type { CreateSupportedBodyInput } from "@contact-management/shared-schemas/supported-bodies";
 import { DomainMultiSelect } from "@contact-management/ui";
@@ -55,7 +56,10 @@ export function SupportedBodyForm({ onSuccess }: { onSuccess?: () => void }) {
         }
         return;
       }
-      setConflict({ message: "שמירה נכשלה — נסה/י שוב" }); // generic fallback, UX-DR16-style
+      // Generic/unexpected failure → toast (UX-DR16, EXPERIENCE.md "שמירה נכשלה"
+      // row — applies to every form). Form values are untouched (no reset()
+      // on this path), so the user can just retry.
+      notifications.show({ color: "red", title: "שגיאה", message: "שמירה נכשלה — נסה/י שוב" });
     }
   });
 

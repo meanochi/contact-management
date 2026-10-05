@@ -1,13 +1,21 @@
 "use client";
 
-import { AppShell as MantineAppShell, Burger, Group, Text } from "@mantine/core";
+import { AppShell as MantineAppShell, Burger, Group, NavLink, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-// Story 1.1: empty shell only (Sidebar + content area), no auth gate — shown
-// directly to anyone who opens apps/web. Sidebar content itself (nav links)
-// is added once there are real screens to link to, starting Story 1.2+.
+// Story 1.5 — nav links added now that there are two real screens to switch
+// between (Story 1.1's placeholder comment said this would happen once that
+// was true).
+const NAV_ITEMS = [
+  { href: "/supported-bodies", label: "גופים נתמכים" },
+  { href: "/contacts", label: "אנשי קשר" },
+];
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [opened, { toggle }] = useDisclosure();
+  const pathname = usePathname();
 
   return (
     <MantineAppShell
@@ -22,7 +30,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Group>
       </MantineAppShell.Header>
 
-      <MantineAppShell.Navbar p="md">{/* Sidebar — ריק בשלב זה */}</MantineAppShell.Navbar>
+      <MantineAppShell.Navbar p="md">
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.href}
+            component={Link}
+            href={item.href}
+            label={item.label}
+            active={pathname === item.href}
+          />
+        ))}
+      </MantineAppShell.Navbar>
 
       <MantineAppShell.Main>{children}</MantineAppShell.Main>
     </MantineAppShell>

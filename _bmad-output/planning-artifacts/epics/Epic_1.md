@@ -127,6 +127,8 @@ _[DRAFT — טרם אושר סופית]_
 
 ## Story 1.3: עריכה והשבתה של רשומת גוף נתמך
 
+**⚠️ סדר בנייה בפועל: סטורי זו נבנתה אחרי Story 1.4, לא לפניה.** ה-AC כאן מניח רשימה שאפשר ללחוץ על שורותיה — ברגע שנכתבה הסטורי הזו (לפי סדר ה-FR במסמך הדרישות, FR-4 לפני FR-5) עוד לא היה שום מסך רשימה. הוחלט להחליף את סדר הבנייה בפועל כדי שלכל סטורי שמסתיימת יהיה דבר אמיתי ושלם להדגים. המספור/ה-ID נשארו כפי שהם (תואמים את ה-FR Coverage Map), רק סדר הביצוע בפועל שונה.
+
 בתור מי שנכנס למערכת,
 אני רוצה לערוך פרטי גוף נתמך קיים (כולל שיוך התחומים שלו) או להשבית אותו,
 כדי שהמידע יישאר מעודכן גם כשגוף מפסיק להיות פעיל.
@@ -143,7 +145,7 @@ _[DRAFT — טרם אושר סופית]_
 
 **בהינתן** רשומת גוף נתמך פעילה עם אנשי קשר משויכים
 **כאשר** משתמש לוחץ "השבת" ומאשר
-**אז** הרשומה מסומנת `status: INACTIVE` — **לא נמחקת**, ואנשי הקשר המשויכים אליה נשארים ללא שינוי (FR-4 תוצאה נבדקת)
+**אז** הרשומה מסומנת `status: INACTIVE` — **לא נמחקת**, ואנשי הקשר המשויכים אליה נשארים ללא שינוי (FR-4 תוצאה נבדקת). **הערה:** `SupportedBody` אין לו `status` enum כמו ל-`Contact` — ההשבתה בפועל מסמנת `isActive: false` (אותו שדה בוליאני שכבר קיים מ-Story 1.2/1.4), לא `status`. גם אין עדיין קשר `Contact`↔`SupportedBody` במודל (Contact לא נבנה עדיין ב-Epic זה) — "אנשי הקשר נשארים ללא שינוי" יאומת בפועל כש-Story 1.5 ואילך נבנות.
 
 **בהינתן** משתמש מנסה לשנות ח"פ לערך ששייך כבר לגוף אחר
 **כאשר** הוא שומר
@@ -152,17 +154,22 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **שרת: פקודות ו-API:**
-- [ ] `apps/api/src/supported-bodies/supported-bodies.controller.ts` — מתווסף `PATCH /supported-bodies/:id` עם `JoiValidationPipe(updateSupportedBodySchema)` (כולל `domainIds` מעודכן)
-- [ ] `supported-bodies.service.ts` — `updateSupportedBody` — מסנכרנת את שורות `SupportedBodyOnDomain` (הוספה/הסרה) מול `domainIds` החדש / `deactivateSupportedBody` (משתמשת ב-`status: 'INACTIVE'`, לא מחיקה — per `expertise-postgres-prisma`)
+- [x] `apps/api/src/supported-bodies/supported-bodies.controller.ts` — מתווסף `PATCH /supported-bodies/:id` עם `JoiValidationPipe(updateSupportedBodySchema)` (כולל `domainIds` מעודכן). שגיאת ייחודיות (409) ו-404 (`NOT_FOUND`) כש-id לא קיים — אומתו שתיהן
+- [x] `supported-bodies.service.ts` — `update()` אחת (לא שתי פונקציות נפרדות) — עריכה והשבתה שתיהן עוברות דרך אותו `PATCH`, בדומה לכלל Contact DELETE-via-PATCH שב-`expertise-api-rest`. מסנכרנת את שורות `SupportedBodyOnDomain` ע"י **replace מלא** (מחיקה + יצירה מחדש בטרנזקציה אחת), לא דיף הוספה/הסרה — פישוט סביר כש-join table קטן. השבתה משתמשת ב-`isActive: false` (לא `status`, ר' הערה ב-AC למעלה), לא מחיקה
 
 **UI:**
-- [ ] `apps/web/components/supported-bodies/SupportedBodyEditDrawer.tsx` — לחיצה על שורה פותחת Drawer (UX-DR11), כולל `DomainMultiSelect` מ-Story 1.2 טעון עם התחומים הנוכחיים
-- [ ] כפתור "השבת" + Modal אישור, מחובר לאותו `PATCH` endpoint
-- [ ] `useUpdateSupportedBodyMutation` + invalidation תגיות RTK Query כך שרשימת הגופים (Story 1.4) מתעדכנת
+- [x] `apps/web/components/supported-bodies/SupportedBodyEditDrawer.tsx` — לחיצה על כל מקום בשורה (ב-`SupportedBodiesList.tsx`) פותחת Drawer (UX-DR11), כולל `DomainMultiSelect` מ-Story 1.2 טעון עם התחומים הנוכחיים (מאופס מחדש בכל פתיחת רשומה אחרת — אותו Drawer משמש לכל השורות)
+- [x] כפתור "השבת" + Modal אישור, מחובר לאותו `PATCH` endpoint
+- [x] **תוספת לאחר בדיקה עם Rachel:** ה-AC המקורי לא כיסה הפעלה מחדש — כשגוף לא פעיל, הכפתור מתחלף ל"הפעל מחדש" (ללא Modal אישור — פעולה הפיכה ולא הרסנית, לא כמו השבתה), קורא לאותו `PATCH` עם `{isActive:true}`
+- [x] `useUpdateSupportedBodyMutation` + invalidation תגית `SupportedBody` כך שרשימת הגופים (Story 1.4) מתעדכנת אחרי שמירה/השבתה
+
+**⚠️ אימות:** `build`/`typecheck`/`lint`/`test` — 18/18 ירוק. אומת end-to-end מול שרת API רץ בפועל (לא רק unit-level): עריכת שם (כולל טקסט בעברית דרך קובץ, לא CLI inline — ר' הערת Story 1.4 על קידוד Git Bash), סנכרון `domainIds` משני תחומים לתחום אחד, שגיאת 409 כש-ח"פ מתעדכן לערך שכבר קיים ברשומה אחרת, שגיאת 404 על id לא קיים, השבתה (`isActive:false`) ואז סינון `isActive=true/false` מאשר את השינוי, והרשומה ממשיכה להופיע ב-GET (לא נמחקת). רשומות הבדיקה שנוצרו נוקו/הוחזרו למצבן המקורי בסיום. **מגבלה זהה לסטוריז קודמות:** אין כלי browser automation — לחיצה בפועל על שורה ופתיחת ה-Drawer לא אומתו ויזואלית בדפדפן, רק ברמת קוד/API/SSR.
 
 ---
 
 ## Story 1.4: חיפוש וסינון גופים נתמכים
+
+**⚠️ סדר בנייה בפועל: סטורי זו נבנית *לפני* Story 1.3.** ר' ההערה ב-Story 1.3 — Story 1.4 בונה את הרשימה עצמה קודם, כדי ש-Story 1.3 (עריכה) יהיה לה דבר אמיתי על המסך להתחבר אליו.
 
 בתור מי שנכנס למערכת,
 אני רוצה לחפש ולסנן גופים נתמכים לפי שם, תחום, סטטוס ומספר ח"פ,
@@ -189,14 +196,17 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **שרת: פקודות ו-API:**
-- [ ] `apps/api/src/supported-bodies/supported-bodies.controller.ts` — מתווסף `GET /supported-bodies?search=&domainId=&status=&companyId=` + `JoiValidationPipe` על ה-query; `domainId` מסנן דרך `domains: { some: { domainId } }`
-- [ ] שאילתת רשימה ב-`supported-bodies.service.ts` — `select` ממוקד (לא שליפת רשומה מלאה), פילטרים דרך שדות מאונדקסים
+- [x] `apps/api/src/supported-bodies/supported-bodies.controller.ts` — מתווסף `GET /supported-bodies?search=&domainId=&isActive=&page=&pageSize=` + `JoiValidationPipe` על ה-query; `domainId` מסנן דרך `domains: { some: { domainId } }`. **הערה:** "status" ב-AC המקורי הפך בפועל ל-`isActive` (בוליאני) — זה השדה האמיתי ב-`SupportedBody`, אין לו status enum כמו ל-`Contact`. גם `companyId` כפילטר נפרד הוצא — `search` כבר מכסה חיפוש גם לפי ח"פ, לא כפלנו פרמטר
+- [x] שאילתת רשימה ב-`supported-bodies.service.ts` — `select` ממוקד, פילטרים + pagination, אומת מול שרת רץ (ללא פילטר / עם `search` / עם `isActive=false`)
 
 **UI:**
-- [ ] `SupportedBodiesList.tsx` (Server Component, שליפה ראשונית דרך `apps/web/lib/api-client.ts`) + client filter toolbar (שדה חיפוש debounced ~300ms — UX-DR22)
-- [ ] קומפוננטת Pagination (לא גלילה אינסופית — UX-DR24)
-- [ ] מצב `Skeleton` לטעינה ראשונית (UX-DR15) ו-Empty State לתוצאה ריקה (UX-DR6)
-- [ ] `useListSupportedBodiesQuery` (RTK Query, מול `apps/api`) לסינון בצד הלקוח
+- [x] `SupportedBodiesList.tsx` — **פרשנות:** נבנה כ-Client Component טהור (לא Server Component + hydration כמו שה-pattern הקנוני ב-`expertise-react-nextjs` מציע) — פישוט מכוון: ה-AC דורש רק `Skeleton` בזמן טעינה, לא נתונים כבר ב-SSR הראשון, ו-fetch מהלקוח בלבד עונה על זה ישירות. שדה חיפוש debounced ~300ms (`useDebouncedValue` מ-`@mantine/hooks`) — UX-DR22
+- [x] קומפוננטת Pagination (לא גלילה אינסופית — UX-DR24)
+- [x] מצב `Skeleton` לטעינה ראשונית (UX-DR15) ו-`EmptyState` חדש ב-`packages/ui` (אייקון+משפט+פעולה, UX-DR6) — משותף לשימוש חוזר במסכי רשימה עתידיים
+- [x] `useListSupportedBodiesQuery` (RTK Query, מול `apps/api`) לסינון בצד הלקוח
+- [x] **תוספת שלא תוכננה מראש:** `SupportedBodiesScreen.tsx` — קומפוננטה שמחזיקה את מצב "פתיחת Drawer היצירה" ברמה אחת מעל גם לכפתור הראשי וגם לפעולת ה-Empty State ("צרי את הראשון") כדי ששתיהן יפתחו את אותו Drawer
+
+**⚠️ מגבלת אימות:** בדקתי build/typecheck/lint/test (ירוק) ו-SSR בפועל מול שרת רץ (הכותרת, הכפתור ושדה החיפוש מופיעים נכון). **לא בדקתי ויזואלית בדפדפן** — אין כלי browser automation זמין; לא אומת החיפוש-תוך-הקלדה, הדפדוף (pagination), או מעברי המסך בפועל מול עין אנושית.
 
 ---
 

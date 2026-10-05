@@ -1,0 +1,15 @@
+{
+  "extends": "@contact-management/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // Override the base's ESM (NodeNext) setting — this package is CommonJS,
+    // consumed only by apps/api (also CommonJS). See expertise-nodejs-typescript
+    // "Module system" for why (NestJS DI + reflect-metadata reliability).
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "src/generated"]
+}

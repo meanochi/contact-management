@@ -1,0 +1,19 @@
+{
+  "extends": "@contact-management/config/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM"],
+    // Never compiled to disk — consumed as TypeScript source directly by
+    // apps/web's bundler (Turbopack), which resolves against source
+    // extensions itself. The base's NodeNext (which requires explicit .js
+    // extensions in relative imports, for code actually run by plain Node)
+    // doesn't apply to a bundler-only-consumed package like this one.
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

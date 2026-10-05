@@ -1,0 +1,67 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  tableName   String   @map("table_name")
+  recordId    String   @map("record_id")
+  action      String // "CREATE" | "UPDATE" | "DELETE"
+  before      Json?
+  after       Json?
+  changedById String?  @map("changed_by_id")
+  changedAt   DateTime @default(now())
+
+  @@index([tableName, recordId])
+  @@index([changedById])
+}
+
+// Story 1.2. Admin-managed lookup table — real table, not a Prisma enum, so
+// domains can be added/renamed/deactivated at runtime without a migration.
+// No management screen in Epic 1 (seeded directly, expertise-postgres-prisma).
+model Domain {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supportedBodies SupportedBodyOnDomain[]
+}
+
+// Story 1.2. companyId (ח"פ) is the natural business key — @unique at the DB
+// level, not just app-level, so a race can't bypass it. Many-to-many with
+// Domain (a body can belong to more than one domain — product decision).
+//
+// `contacts`/`registrationRequests` back-relations are NOT declared yet —
+// Contact (Story 1.5) and RegistrationRequest (Epic 2) don't exist in this
+// schema yet. Add them here when those models are introduced, not before.
+model SupportedBody {
+  id        String   @id @default(cuid())
+  companyId String   @unique @map("company_id") // ח"פ
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  domains SupportedBodyOnDomain[]
+}
+
+// Explicit join model, not an implicit m2m — auditable like any other model,
+// and leaves room for relation-level columns later if ever needed.
+model SupportedBodyOnDomain {
+  supportedBodyId String   @map("supported_body_id")
+  domainId        String   @map("domain_id")
+  createdAt       DateTime @default(now())
+
+  supportedBody SupportedBody @relation(fields: [supportedBodyId], references: [id])
+  domain        Domain        @relation(fields: [domainId], references: [id])
+
+  @@id([supportedBodyId, domainId])
+  @@index([domainId])
+}

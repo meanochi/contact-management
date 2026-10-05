@@ -1,0 +1,35 @@
+{
+  "name": "@contact-management/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/client.js",
+  "types": "./dist/client.d.ts",
+  "exports": {
+    ".": "./dist/client.js"
+  },
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev && prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@prisma/client": "7.10.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@contact-management/config": "*",
+    "prisma": "7.10.0",
+    "typescript": "5.9.3",
+    "@types/node": "26.6.4",
+    "@types/pg": "8.23.1",
+    "dotenv": "18.0.5",
+    "tsx": "4.23.15"
+  }
+}

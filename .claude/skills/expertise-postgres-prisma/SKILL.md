@@ -390,7 +390,7 @@ Universal principles (simplicity, naming, DRY) are in `expertise-code-quality` �
 - **CI:** run `prisma migrate deploy` against a clean, ephemeral Postgres as a check — this catches migrations that only "worked" locally, and ordering conflicts from two branches adding migrations independently.
 - **Production/staging:** only `prisma migrate deploy` ever touches these. Never run `migrate dev` against a shared environment.
 - **Migration history conflicts** (two branches with sibling migrations sharing a parent): resolve by rebasing onto `main` and regenerating (`migrate dev` again) rather than hand-editing timestamps.
-- Check whether the installed Prisma version auto-runs `generate`/seed after `migrate dev` — recent majors have stopped doing this by default, so confirm the npm script actually chains what you need (`"db:dev": "prisma migrate dev && prisma generate"`).
+- Check whether the installed Prisma version auto-runs `generate`/seed after `migrate dev` — recent majors have stopped doing this by default, so confirm the npm script actually chains what you need (`"db:dev": "prisma migrate dev && prisma generate"`). **Confirmed for this project's installed version (Prisma 7.10.0): it does not auto-generate after `migrate dev`** — a migration can apply successfully while the generated client (`packages/db/src/generated/prisma`) still reflects the old schema, so a model added in the same change looks "missing" (`prisma.newModel` is `undefined`) until `prisma generate` runs explicitly. `packages/db`'s own `db:migrate` script chains both for this reason — use it rather than calling `prisma migrate dev` directly.
 
 ## Connection pooling — revisit only if hosting becomes serverless
 

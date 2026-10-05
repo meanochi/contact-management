@@ -1,0 +1,26 @@
+{
+  "name": "@contact-management/shared-schemas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./domains": "./dist/domains/types.js",
+    "./supported-bodies": "./dist/supported-bodies/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "joi": "18.2.9"
+  },
+  "devDependencies": {
+    "@contact-management/config": "*",
+    "typescript": "5.9.3",
+    "@types/node": "26.6.4"
+  }
+}

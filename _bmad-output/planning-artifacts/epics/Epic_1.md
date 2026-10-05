@@ -43,26 +43,26 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **תשתיות:**
-- [ ] הקמת מונורפו Turborepo + npm workspaces — `package.json` שורש עם `workspaces`, `turbo.json`, `packages/config` (tsconfig/eslint משותפים)
-- [ ] `docker-compose.yml` להרצת PostgreSQL מקומי
-- [ ] `.gitlab-ci.yml` — פייפליין בסיסי: build+lint+test לכל אחת משתי האפליקציות בנפרד
-- [ ] הגדרת `tsc --noEmit` כסקריפט בכל package/אפליקציה
-- [ ] אימות קצה-לקצה: `npm install && turbo run build` עובר בהצלחה
+- [x] הקמת מונורפו Turborepo + npm workspaces — `package.json` שורש עם `workspaces`, `turbo.json`, `packages/config` (tsconfig/eslint משותפים)
+- [x] `docker-compose.yml` להרצת PostgreSQL מקומי
+- [x] `.gitlab-ci.yml` — פייפליין בסיסי: build+lint+test לכל אחת משתי האפליקציות בנפרד (**לא אומת בפועל מול GitLab אמיתי** — הריפו עובד על GitHub כרגע, ר' החלטה בשיחה)
+- [x] הגדרת `tsc --noEmit` כסקריפט בכל package/אפליקציה
+- [x] אימות קצה-לקצה: `npm install && turbo run build` עובר בהצלחה (אומת בפועל — גם `lint`/`typecheck`/`test`)
 
 **DB:**
-- [ ] `packages/db`: `prisma.config.ts`, `schema.prisma` ריק (עסקית), `PrismaPg` adapter (pg), `prisma migrate dev` ראשון
-- [ ] מודל `AuditLog` + מיגרציה ב-`packages/db`
+- [x] `packages/db`: `prisma.config.ts`, `schema.prisma` ריק (עסקית), `PrismaPg` adapter (pg), `prisma migrate dev` ראשון (אומת מול Postgres אמיתי ב-Docker)
+- [x] מודל `AuditLog` + מיגרציה ב-`packages/db`
 
 **שרת: פקודות ו-API:**
-- [ ] שלד `apps/api` (NestJS): `main.ts` (`NestFactory.create(AppModule)`, `app.enableCors(...)` מוגבל למקור של `apps/web` — AD-12), `app.module.ts` ריק בשלב זה
-- [ ] `common/interceptors/response.interceptor.ts` + `common/filters/all-exceptions.filter.ts` — מעטפת תגובה אחידה (`{data}`/`{error}`), נרשמים גלובלית ב-`main.ts` (`expertise-api-rest`)
-- [ ] Prisma Client Extension לתיעוד (`packages/db/src/client.ts`, `audit-context.ts`) לפי `expertise-postgres-prisma`; `changedById` תמיד `null` באפיק זה; נצרך רק מתוך `apps/api`
+- [x] שלד `apps/api` (NestJS): `main.ts` (`NestFactory.create(AppModule)`, `app.enableCors(...)` מוגבל למקור של `apps/web` — AD-12), `app.module.ts` ריק בשלב זה (אומת גם ב-runtime — השרת עלה בפועל, CORS מוחזר נכון)
+- [x] `common/interceptors/response.interceptor.ts` + `common/filters/all-exceptions.filter.ts` — מעטפת תגובה אחידה (`{data}`/`{error}`), נרשמים גלובלית ב-`main.ts` (`expertise-api-rest`)
+- [x] Prisma Client Extension לתיעוד (`packages/db/src/client.ts`, `audit-context.ts`) לפי `expertise-postgres-prisma`; `changedById` תמיד `null` באפיק זה; נצרך רק מתוך `apps/api`
 
 **UI:**
-- [ ] `packages/ui`: theme override של Mantine לפי טוקני `DESIGN.md` (צבעים, Heebo, radii) + `DirectionProvider`
-- [ ] `apps/web`: שלד Next.js App Router; `app/layout.tsx` עם `dir="rtl"`, `lang="he"`, `mantineHtmlProps`, `MantineProvider`+`DirectionProvider`
-- [ ] `apps/web/lib/api-client.ts` — שלד ראשוני של שכבת החיבור ל-`apps/api` (`expertise-react-nextjs`)
-- [ ] `AppShell` ריק (Sidebar + אזור תוכן) — בלי שער אימות, מוצג ישירות
+- [x] `packages/ui`: theme override של Mantine לפי טוקני `DESIGN.md` (צבעים, Heebo, radii) + `DirectionProvider`
+- [x] `apps/web`: שלד Next.js App Router; `app/layout.tsx` עם `dir="rtl"`, `lang="he"`, `mantineHtmlProps`, `MantineProvider`+`DirectionProvider`
+- [x] `apps/web/lib/api-client.ts` — שלד ראשוני של שכבת החיבור ל-`apps/api` (`expertise-react-nextjs`)
+- [x] `AppShell` ריק (Sidebar + אזור תוכן) — בלי שער אימות, מוצג ישירות
 
 ---
 
@@ -99,24 +99,29 @@ _[DRAFT — טרם אושר סופית]_
 **Tasks / Subtasks:**
 
 **DB:**
-- [ ] מודל `Domain` (id, name, isActive, timestamps) + מיגרציה ב-`packages/db`
-- [ ] סקריפט seed חד-פעמי לתחומים לדוגמה (`packages/db/prisma/seed.ts` או `scripts/seed-domains.ts`), עם נתוני seed (למשל "חינוך", "בריאות")
-- [ ] מודל `SupportedBody` (id, companyId ייחודי, name, isActive, timestamps) + מודל join מפורש `SupportedBodyOnDomain` (many-to-many מול `Domain`) + מיגרציה
+- [x] מודל `Domain` (id, name, isActive, timestamps) + מיגרציה ב-`packages/db`
+- [x] סקריפט seed חד-פעמי לתחומים לדוגמה (`packages/db/prisma/seed.ts`), עם נתוני seed ("חינוך", "בריאות") — אומת מול Postgres אמיתי
+- [x] מודל `SupportedBody` (id, companyId ייחודי, name, isActive, timestamps) + מודל join מפורש `SupportedBodyOnDomain` (many-to-many מול `Domain`) + מיגרציה
 
 **שרת: פקודות ו-API:**
-- [ ] `apps/api/src/domains/` — `domains.module.ts` + `domains.controller.ts` (`GET /domains?isActive=true`, ממוין לפי שם) + `domains.service.ts`
-- [ ] `packages/shared-schemas/domains/types.ts` — DTO לקריאה בלבד (אין `schema.ts` ליצירה/עריכה בסטורי זה)
-- [ ] `packages/shared-schemas/supported-bodies/{types.ts,schema.ts}` — `createSupportedBodySchema` (`domainIds` כמערך, לפחות איבר אחד)
-- [ ] `apps/api/src/supported-bodies/` — `supported-bodies.module.ts` + `supported-bodies.controller.ts` (`POST /supported-bodies` עם `JoiValidationPipe(createSupportedBodySchema)`) + `supported-bodies.service.ts` — יוצר `SupportedBody` + שורות `SupportedBodyOnDomain` יחד (`$transaction` כשיש יותר מתחום אחד)
-- [ ] תרגום שגיאת `P2002` (הפרת ייחודיות ח"פ) ל-`ConflictException` (`409`) עם פרטי הרשומה הקיימת בתגובה, ב-`supported-bodies.service.ts` (ל-UX-DR18)
+- [x] `apps/api/src/domains/` — `domains.module.ts` + `domains.controller.ts` (`GET /domains`, ממוין לפי שם) + `domains.service.ts`
+- [x] `packages/shared-schemas/domains/types.ts` — DTO לקריאה בלבד
+- [x] `packages/shared-schemas/supported-bodies/{types.ts,schema.ts}` — `createSupportedBodySchema` (`domainIds` כמערך, לפחות איבר אחד)
+- [x] `apps/api/src/supported-bodies/` — `supported-bodies.module.ts` + `supported-bodies.controller.ts` (`POST /supported-bodies` עם `JoiValidationPipe(createSupportedBodySchema)`) + `supported-bodies.service.ts` — יוצר `SupportedBody` + שורות `SupportedBodyOnDomain` יחד (`$transaction`)
+- [x] תרגום שגיאת `P2002` (הפרת ייחודיות ח"פ) ל-`ConflictException` (`409`) עם פרטי הרשומה הקיימת בתגובה — אומת בפועל (יצירה תקינה, ח"פ כפול, ולידציה חסרה — כל אחד נבדק מול שרת רץ)
+- [x] `common/pipes/joi-validation.pipe.ts` — נוצר כאן (לא היה עדיין בסטורי 1.1, כי זה הסטורי הראשון עם גוף בקשה לאמת)
+
+**⚠️ חריגה זמנית, לפי החלטת מוצר (לא שלי) — Audit Trail מכובה:** בזמן הרצת הסטורי התגלה באג אמיתי ומתועד ב-Prisma 7.10.0 (`Prisma.getExtensionContext(this)` לא עובד בתבנית `$allModels.$allOperations` — ראו github.com/prisma/prisma/discussions/24178) ששבר **כל** כתיבה לכל מודל. הוחלט לכבות את ה-Audit Extension זמנית (הקוד שלם ב-`packages/db/src/client.ts`, רק לא פעיל, עם הסבר מלא להפעלה מחדש) ולא לרדת בגרסת Prisma. המשמעות: אף כתיבה באפיק זה (כולל מכאן ואילך) לא מתועדת ב-`AuditLog` עד שיוחלט איך לתקן.
 
 **UI:**
-- [ ] קומפוננטת `DomainMultiSelect` משותפת ב-`packages/ui` (Mantine `MultiSelect`, נצרכת ע"י יותר מ-feature אחד — לפי מפת המבנה ב-`expertise-code-quality`), טוענת דרך `apps/web/lib/api-client.ts`, לשימוש חוזר ב-Story 1.3 (עריכת גוף נתמך)
-- [ ] `apps/web/components/supported-bodies/SupportedBodyForm.tsx` — RHF + `joiResolver`, כולל `DomainMultiSelect` (מחובר דרך `Controller`)
-- [ ] `useCreateSupportedBodyMutation` (RTK Query, `baseQuery` מול `apps/api`) ב-`apps/web/lib/api/supportedBodiesApi.ts`
-- [ ] חיבור טופס "גוף נתמך חדש" למסך/Drawer — שמירה עובדת ויוצרת את הרשומה בפועל
-- [ ] כפתור "שמירה" פעיל ולחיץ ברגע ששדות החובה (שם, ח"פ, תחום אחד לפחות) תקינים; מושבת **זמנית** רק כל עוד יש שדה חובה ריק/לא תקין (ולידציה בזמן אמת, לא רק בלחיצה) — UX-DR12
-- [ ] טיפול במקרה קצה: רשימת תחומים ריקה — שדה ה-`MultiSelect` מציג רשימה ריקה בלי שגיאה
+- [x] קומפוננטת `DomainMultiSelect` משותפת ב-`packages/ui` — **פרשנות:** נבנתה כקומפוננטה פרזנטיישנית בלבד (מקבלת `domains`/`value`/`onChange` כ-props), לא טוענת בעצמה — כי `packages/ui` אסור לה להיות תלויה ב-RTK Query hooks של `apps/web` (AD-11). הטעינה בפועל (`useListActiveDomainsQuery`) קורית ב-`apps/web` ומועברת פנימה. לשימוש חוזר ב-Story 1.3.
+- [x] `apps/web/components/supported-bodies/SupportedBodyForm.tsx` — RHF + `joiResolver`, כולל `DomainMultiSelect` (מחובר דרך `Controller`)
+- [x] `useCreateSupportedBodyMutation` (RTK Query, `baseQuery` מול `apps/api`) ב-`apps/web/lib/api/supportedBodiesApi.ts` — כולל גם תשתית `lib/store.ts`+`StoreProvider` שלא היו עדיין (נדרשו כדי שה-hook הזה יעבוד בכלל)
+- [x] חיבור טופס "גוף נתמך חדש" ל-Drawer (`NewSupportedBodyDrawer.tsx`, נפתח משמאל — UX-DR7) בתוך `app/(internal)/supported-bodies/page.tsx`
+- [x] כפתור "שמירה" מושבת עד ששדות החובה תקינים (`mode: "onChange"` ב-RHF) — UX-DR12
+- [x] טיפול במקרה קצה: רשימת תחומים ריקה — `MultiSelect` מציג placeholder מתאים בלי שגיאה
+
+**⚠️ מגבלת אימות:** בדקתי build/typecheck/lint/test (ירוק) ו-SSR של הדף בפועל (`curl` מול שרת רץ — הטקסט העברי מופיע נכון). **לא בדקתי ויזואלית בדפדפן אמיתי** (אין כלי browser automation בסביבה) — לא אומת שהלחיצה על הכפתור פותחת את ה-Drawer, שהטופס אכן נשלח מהדפדפן, או ש-CORS עובד end-to-end מול דפדפן אמיתי. כדאי שתבדקי את זה ידנית לפני שסוגרים את הסטורי.
 
 ---
 

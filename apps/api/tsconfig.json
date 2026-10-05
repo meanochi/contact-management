@@ -1,0 +1,28 @@
+{
+  "extends": "@contact-management/config/tsconfig.base.json",
+  "compilerOptions": {
+    // CommonJS, not the base's ESM (NodeNext) — see expertise-nodejs-typescript
+    // "Module system": NestJS's reflect-metadata-based DI is CommonJS-proven.
+    // NodeNext (not CommonJS/Node) — but this package's own files still
+    // compile and resolve as CommonJS, because NodeNext reads the nearest
+    // package.json "type" field per package ("type": "commonjs" here) rather
+    // than forcing ESM everywhere. The reason to use NodeNext at all: "Node"
+    // (classic) resolution doesn't understand package.json "exports"
+    // subpaths (e.g. @contact-management/shared-schemas/domains); NodeNext
+    // does, without requiring explicit .js extensions in this CJS package's
+    // own relative imports (that requirement only applies to ESM files).
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "verbatimModuleSyntax": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./",
+    "incremental": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test"]
+}

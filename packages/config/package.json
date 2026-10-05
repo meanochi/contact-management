@@ -1,0 +1,19 @@
+{
+  "name": "@contact-management/config",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "tsconfig.base.json",
+    "eslint.base.js"
+  ],
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./eslint.base.js": "./eslint.base.js"
+  },
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "8.71.0",
+    "@typescript-eslint/parser": "8.71.0",
+    "eslint-config-prettier": "10.1.8"
+  }
+}

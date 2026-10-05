@@ -1,0 +1,93 @@
+image: node:24-alpine
+
+# Not yet connected to an actual GitLab project — this pipeline hasn't been
+# run for real. Written to match the npm scripts this repo actually defines,
+# so it should work as-is once the repo is pushed to GitLab; verify the
+# first real run rather than assuming it from this file alone.
+
+stages:
+  - install
+  - verify
+  - build
+
+variables:
+  # `prisma generate` (run automatically by Turborepo's task graph before
+  # build/typecheck/test, see turbo.json) only reads the schema — it never
+  # opens a connection — but prisma.config.ts still requires DATABASE_URL to
+  # be *set*. This placeholder satisfies that without needing a real
+  # database in CI. Jobs that would need an actual live Postgres (future
+  # integration tests, per expertise-postgres-prisma) must override this
+  # with a real GitLab CI/CD variable, not rely on the placeholder below.
+  DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+default:
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+      - node_modules/
+    policy: pull
+
+install:
+  stage: install
+  script:
+    - npm ci --cache .npm --prefer-offline
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+      - node_modules/
+    policy: pull-push
+
+lint:
+  stage: verify
+  needs: ["install"]
+  script:
+    - npm run lint
+
+typecheck:
+  stage: verify
+  needs: ["install"]
+  script:
+    - npm run typecheck
+
+test:web:
+  stage: verify
+  needs: ["install"]
+  script:
+    - npx turbo run test --filter=@contact-management/web
+
+test:api:
+  stage: verify
+  needs: ["install"]
+  script:
+    - npx turbo run test --filter=@contact-management/api
+
+build:web:
+  stage: build
+  needs: ["lint", "typecheck"]
+  script:
+    - npx turbo run build --filter=@contact-management/web
+  artifacts:
+    paths:
+      - apps/web/.next/
+    expire_in: 1 day
+
+build:api:
+  stage: build
+  needs: ["lint", "typecheck"]
+  script:
+    - npx turbo run build --filter=@contact-management/api
+  artifacts:
+    paths:
+      - apps/api/dist/
+    expire_in: 1 day

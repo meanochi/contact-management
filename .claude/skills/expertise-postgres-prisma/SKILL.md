@@ -148,12 +148,12 @@ model ContactOnSupportedBody {
   @@index([supportedBodyId])
 }
 
-// Post-1.6 revision (confirmed with Rachel): a SupportedBody can carry more
-// than one Domain, but the Contact representing it might only be "the
-// contact person" for some of them, not all. Always a *subset* of the linked
-// SupportedBody's own domains — enforced in the Service layer (fetch the
-// body's own domains, check the submitted set is a subset), not just the UI;
-// Joi has no way to know which domains belong to which body.
+// Post-1.6 revision: a SupportedBody can carry more than one Domain, but the
+// Contact representing it might only be "the contact person" for some of
+// them, not all. Always a *subset* of the linked SupportedBody's own
+// domains — enforced in the Service layer (fetch the body's own domains,
+// check the submitted set is a subset), not just the UI; Joi has no way to
+// know which domains belong to which body.
 model ContactOnSupportedBodyDomain {
   contactId       String @map("contact_id")
   supportedBodyId String @map("supported_body_id")

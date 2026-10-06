@@ -19,11 +19,11 @@ import {
 } from "@/lib/api/contactsApi";
 import { MarkInactiveModal } from "./MarkInactiveModal";
 
-// Requested by Rachel after noticing the gap: an existing link's domain
-// subset was only ever choosable once, at creation/add time. Local pending
-// state + a "save" button that only appears once something actually
-// changed — not an auto-save-per-toggle, consistent with the rest of the
-// Drawer's explicit-save pattern.
+// An existing link's domain subset was only ever choosable once, at
+// creation/add time — this fills that gap. Local pending state + a "save"
+// button that only appears once something actually changed — not an
+// auto-save-per-toggle, consistent with the rest of the Drawer's
+// explicit-save pattern.
 function LinkedBodyBlock({
   index,
   bodyName,
@@ -86,8 +86,8 @@ interface ApiErrorBody {
 }
 
 // role/phone/emails/notes/channel prefs only — firstName/lastName/idNumber
-// are not editable in this story (confirmed with Rachel: per the AC's field
-// list), and supportedBodyId is handled by the separate "link" section below.
+// are not editable in this story (per the AC's field list), and
+// supportedBodyId is handled by the separate "link" section below.
 interface EditFormValues {
   role: string;
   phone: string;
@@ -98,9 +98,12 @@ interface EditFormValues {
 }
 
 export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | null; onClose: () => void }) {
-  // Same "get everything active" read as ContactForm — used both to show
-  // linked bodies' names and to populate the "add another" Select.
-  const { data: supportedBodiesPage } = useListSupportedBodiesQuery({ isActive: true, page: 1, pageSize: 100 });
+  // Bug found by Rachel: fetching isActive-only here meant an *existing*
+  // link to a body that was later deactivated couldn't resolve a name at
+  // all (the fallback showed the raw id). Fetch every body regardless of
+  // status — "add another" below filters down to active-only itself, since
+  // that's the only place a *new* link should be restricted to active bodies.
+  const { data: supportedBodiesPage } = useListSupportedBodiesQuery({ page: 1, pageSize: 100 });
   const supportedBodies = supportedBodiesPage?.items ?? [];
   const { data: domains = [] } = useListActiveDomainsQuery();
   const [updateContact, { isLoading: isSaving }] = useUpdateContactMutation();
@@ -111,9 +114,9 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
   const [addingBodyId, setAddingBodyId] = useState<string | null>(null);
   const [addingDomainIds, setAddingDomainIds] = useState<string[]>([]);
   const [markingInactive, setMarkingInactive] = useState(false);
-  // Requested by Rachel: the missing counterpart to "שייך" — removing a
-  // link is more consequential than toggling a domain pill, so it gets the
-  // same confirm-Modal pattern as SupportedBody's own deactivate flow.
+  // The missing counterpart to "שייך" — removing a link is more
+  // consequential than toggling a domain pill, so it gets the same
+  // confirm-Modal pattern as SupportedBody's own deactivate flow.
   const [confirmingRemoveBodyId, setConfirmingRemoveBodyId] = useState<string | null>(null);
   // `contact` is a one-time snapshot passed down from the row that was
   // clicked (ContactsScreen's `editing` state) — it never gets live updates.
@@ -164,8 +167,10 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
   const supportedBodyLinks = linkedOverride ?? contact.supportedBodyLinks;
   const linkedBodyIds = supportedBodyLinks.map((link) => link.supportedBodyId);
   // Already-linked bodies don't appear as options — re-adding one is a
-  // conflict, not a useful action (the Select just hides the no-op).
-  const availableBodies = supportedBodies.filter((b) => !linkedBodyIds.includes(b.id));
+  // conflict, not a useful action (the Select just hides the no-op). Also
+  // excludes inactive bodies — `supportedBodies` now includes them (see
+  // above), but a *new* link should never be made to a deactivated body.
+  const availableBodies = supportedBodies.filter((b) => !linkedBodyIds.includes(b.id) && b.isActive);
 
   // Picking a body for the "add another" section auto-fills all of its
   // domains (same default as ContactForm) — reset whenever the choice changes.
@@ -238,8 +243,8 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
     }
   };
 
-  // Reactivation — not from a story AC, added per Rachel's request (mirrors
-  // SupportedBody's own "הפעל מחדש"). No confirm Modal — non-destructive.
+  // Reactivation — not from a story AC, mirrors SupportedBody's own
+  // "הפעל מחדש". No confirm Modal — non-destructive.
   const handleActivate = async () => {
     try {
       await activateContact({ id: contact.id }).unwrap();
@@ -327,16 +332,24 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
           <Stack gap="xs" mt="md">
             <Text fw={600}>גופים נתמכים משויכים</Text>
             {/* Each link shown with its own editable domain subset — not just
-                the body's full domain list (post-1.6 revision; editing
-                added per Rachel's follow-up request). */}
+                the body's full domain list (post-1.6 revision). */}
             {supportedBodyLinks.map((link, index) => {
               const linkBody = supportedBodies.find((b) => b.id === link.supportedBodyId);
               const linkBodyDomains = domains.filter((d) => linkBody?.domainIds.includes(d.id) ?? false);
+              // A link to a body that's since been deactivated must still
+              // show its real name, not the raw id — plus a clear
+              // "(גוף מושבת)" indicator instead of silently looking
+              // identical to an active link.
+              const bodyName = linkBody
+                ? linkBody.isActive
+                  ? linkBody.name
+                  : `${linkBody.name} (גוף מושבת)`
+                : "גוף נתמך לא נמצא";
               return (
                 <LinkedBodyBlock
                   key={link.supportedBodyId}
                   index={index}
-                  bodyName={linkBody?.name ?? link.supportedBodyId}
+                  bodyName={bodyName}
                   domainIds={link.domainIds}
                   bodyDomains={linkBodyDomains}
                   onSave={(domainIds) => handleSaveLinkDomains(link.supportedBodyId, domainIds)}

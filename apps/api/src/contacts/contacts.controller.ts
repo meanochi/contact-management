@@ -57,8 +57,8 @@ export class ContactsController {
     return this.contactsService.addSupportedBody(id, body.supportedBodyId, body.domainIds);
   }
 
-  // Requested by Rachel: editing an *existing* link's domain subset — was
-  // otherwise only choosable once, at creation/add time.
+  // Editing an *existing* link's domain subset — was otherwise only
+  // choosable once, at creation/add time.
   @Patch(":id/supported-bodies/:supportedBodyId")
   updateSupportedBodyDomains(
     @Param("id") id: string,
@@ -68,8 +68,8 @@ export class ContactsController {
     return this.contactsService.updateSupportedBodyDomains(id, supportedBodyId, body.domainIds);
   }
 
-  // Requested by Rachel: the missing counterpart to the POST above — a link
-  // could be added but never removed. No body needed.
+  // The missing counterpart to the POST above — a link could be added but
+  // never removed. No body needed.
   @Delete(":id/supported-bodies/:supportedBodyId")
   removeSupportedBody(@Param("id") id: string, @Param("supportedBodyId") supportedBodyId: string) {
     return this.contactsService.removeSupportedBody(id, supportedBodyId);

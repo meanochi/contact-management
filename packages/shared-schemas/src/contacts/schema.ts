@@ -16,8 +16,8 @@ const domainIdsSchema = Joi.array()
   .required()
   .messages({ "array.min": "יש לבחור לפחות תחום אחד", "any.required": "יש לבחור לפחות תחום אחד" });
 
-// Requested by Rachel: real format validation for ת"ז, not just "not empty".
-// Exactly 9 digits, plus the standard Israeli ID checksum (a weighted-digit
+// Real format validation for ת"ז, not just "not empty". Exactly 9 digits,
+// plus the standard Israeli ID checksum (a weighted-digit
 // check, the same algorithm the real teudat zehut uses) — not just a length
 // check, so a random 9-digit string that isn't a real ID number is rejected
 // too. Only used in createContactFields — idNumber isn't editable (Story 1.6
@@ -46,8 +46,8 @@ const idNumberSchema = Joi.string()
     "string.empty": 'ת"ז היא שדה חובה',
   });
 
-// Requested by Rachel: "מספר תווים הגיוני, מינימום 9" — a plain length
-// floor, not a full phone-format/country-code validator. Shared by create
+// A reasonable minimum length (9 characters), not a full phone-format/
+// country-code validator. Shared by create
 // and update (both currently require phone to be non-blank when present).
 const phoneSchema = Joi.string()
   .trim()
@@ -60,8 +60,8 @@ const phoneSchema = Joi.string()
 const createContactFields: Record<keyof CreateContactInput, Joi.Schema> = {
   firstName: Joi.string().trim().min(1).max(100).required(),
   lastName: Joi.string().trim().min(1).max(100).required(),
-  // Revised per Rachel: these are required, same as firstName/lastName —
-  // only notes (below) is genuinely optional/clearable.
+  // These are required, same as firstName/lastName — only notes (below)
+  // is genuinely optional/clearable.
   idNumber: idNumberSchema,
   role: Joi.string().trim().min(1).max(100).required(),
   phone: phoneSchema.required(),
@@ -102,7 +102,7 @@ export const listContactsQuerySchema = Joi.object(listContactsQueryFields).requi
 // Story 1.6 — PATCH /contacts/:id. Every field optional **to send** (`.min(1)`
 // on the whole object rejects an empty body) — firstName/lastName/idNumber/
 // supportedBodyId intentionally excluded, see UpdateContactInput. role/phone
-// are required business fields (per Rachel): optional to omit from a PATCH,
+// are required business fields: optional to omit from a PATCH,
 // but if sent, can't be blanked to "" — `.min(1)`, no `.allow("")`, unlike
 // notes below. Editing can't un-set a required field, only create something
 // that was never required in the first place.

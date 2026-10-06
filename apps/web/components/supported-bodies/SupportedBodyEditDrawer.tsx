@@ -44,7 +44,7 @@ export function SupportedBodyEditDrawer({
   // Story 1.5 — "add a contact" entry point, pre-filled with this body's id
   // (the AC's "פותח מתוך מסך גוף נתמך, משויך אוטומטית" case). There's no
   // dedicated per-body detail page yet, so this edit Drawer is the closest
-  // thing to "a specific supported body's screen" — confirmed with Rachel.
+  // thing to "a specific supported body's screen".
   const [addingContact, setAddingContact] = useState(false);
 
   const {

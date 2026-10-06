@@ -81,9 +81,10 @@ enum ExternalRequestSource {
 }
 
 // Story 1.5. firstName/lastName kept separate (not one `fullName` column) —
-// product decision, confirmed with Rachel: the create form collects them as
-// two distinct inputs. idNumber (ת"ז) is optional free text, not validated
-// against a checksum — not required by any AC. No direct domainId column: a
+// product decision, the create form collects them as two distinct inputs.
+// idNumber (ת"ז) is a plain nullable string here — format/checksum
+// validation lives at the API layer (packages/shared-schemas), not the DB
+// column itself. No direct domainId column: a
 // Contact never picks a domain outright — it's always a subset of whichever
 // SupportedBody(ies) it's linked to actually carry (revised post-1.6: see
 // ContactOnSupportedBodyDomain below — a multi-domain body's contact isn't
@@ -128,15 +129,15 @@ model ContactOnSupportedBody {
   @@index([supportedBodyId])
 }
 
-// Post-1.6 revision (confirmed with Rachel): a SupportedBody can carry more
-// than one Domain, but the Contact representing it might only be "the
-// contact person" for some of them, not all — e.g. a body spanning חינוך +
-// בריאות where this particular contact only handles חינוך. The UI
-// pre-selects every domain of the chosen SupportedBody and lets the user
-// deselect some; the Service layer enforces that whatever's submitted stays
-// a *subset* of that SupportedBody's own domains (never a domain the body
-// itself isn't in) — that's the actual intent of the original "a contact
-// never picks a domain outright" product decision, not a full reversal of it.
+// Post-1.6 revision: a SupportedBody can carry more than one Domain, but
+// the Contact representing it might only be "the contact person" for some
+// of them, not all — e.g. a body spanning חינוך + בריאות where this
+// particular contact only handles חינוך. The UI pre-selects every domain of
+// the chosen SupportedBody and lets the user deselect some; the Service
+// layer enforces that whatever's submitted stays a *subset* of that
+// SupportedBody's own domains (never a domain the body itself isn't in) —
+// that's the actual intent of the original "a contact never picks a domain
+// outright" product decision, not a full reversal of it.
 model ContactOnSupportedBodyDomain {
   contactId       String @map("contact_id")
   supportedBodyId String @map("supported_body_id")

@@ -20,8 +20,7 @@ const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => String(CURRENT_YEAR - i
 // Client Component — kept consistent with SupportedBodiesList's own
 // deliberate simplification (Story 1.4) rather than switching this one
 // screen to the canonical Server-Component + URL-searchParams pattern;
-// confirmed with Rachel after checking both source requirement docs don't
-// call for URL-shareable filters either way.
+// neither source requirement doc calls for URL-shareable filters either way.
 export function ContactsList({
   onCreateNew,
   onRowClick,

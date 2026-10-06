@@ -28,3 +28,7 @@ Thumbs.db
 
 # test coverage
 coverage/
+
+*.tsbuildinfo
+
+next-env.d.ts

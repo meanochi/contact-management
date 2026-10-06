@@ -242,10 +242,10 @@ export class ContactsService {
     return toDto(updated);
   }
 
-  // Requested by Rachel after noticing the gap: an existing link's domain
-  // subset was only ever chosen once, at creation/add time, with no way to
-  // add/remove domains afterward. Full replace (delete + recreate), same
-  // pattern as SupportedBody's own domainIds sync (expertise-postgres-prisma).
+  // An existing link's domain subset was only ever chosen once, at
+  // creation/add time, with no way to add/remove domains afterward — this
+  // fills that gap. Full replace (delete + recreate), same pattern as
+  // SupportedBody's own domainIds sync (expertise-postgres-prisma).
   async updateSupportedBodyDomains(
     contactId: string,
     supportedBodyId: string,
@@ -274,8 +274,8 @@ export class ContactsService {
     return toDto(updated);
   }
 
-  // Requested by Rachel: the missing counterpart to addSupportedBody — a
-  // link, once added, could never be removed. A Contact must always
+  // The missing counterpart to addSupportedBody — a link, once added,
+  // could never be removed. A Contact must always
   // represent at least one SupportedBody (same rule CreateContactInput's
   // supportedBodyId enforces at creation — see its comment), so removing the
   // *last* remaining link is rejected rather than leaving an orphaned Contact.
@@ -335,8 +335,8 @@ export class ContactsService {
     }
   }
 
-  // Reactivation — not in any story's AC, added per Rachel's request after
-  // noticing the same gap already fixed for SupportedBody. Flips status back
+  // Reactivation — not in any story's AC, fills the same gap already fixed
+  // for SupportedBody. Flips status back
   // to ACTIVE only; deactivatedAt/externalRequestSource/externalRequestDate
   // are left as-is (the historical record of the deactivation that happened —
   // consistent with FR-8/CM-3's "preserve history", not an undo/erase).

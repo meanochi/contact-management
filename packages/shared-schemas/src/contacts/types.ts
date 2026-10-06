@@ -1,8 +1,6 @@
 // Story 1.5. firstName/lastName kept separate (not one combined field) —
-// confirmed with Rachel: the create form collects them as two distinct
-// inputs. idNumber (ת"ז) is free text, no format/checksum validation.
-// Revised per Rachel: idNumber/role/phone are required — only notes stays
-// genuinely optional.
+// the create form collects them as two distinct inputs. idNumber/role/phone
+// are required — only notes stays genuinely optional.
 export interface CreateContactInput {
   firstName: string;
   lastName: string;
@@ -14,17 +12,17 @@ export interface CreateContactInput {
   emailOptIn: boolean;
   smsOptIn: boolean;
   supportedBodyId: string; // required — a contact always belongs to at least one body
-  // Post-1.6 revision (confirmed with Rachel): which of supportedBodyId's own
-  // domains this contact actually represents — must be a non-empty subset of
-  // that body's domains, not necessarily all of them. The UI pre-fills every
-  // domain of the chosen body and lets the user deselect some.
+  // Post-1.6 revision: which of supportedBodyId's own domains this contact
+  // actually represents — must be a non-empty subset of that body's domains,
+  // not necessarily all of them. The UI pre-fills every domain of the chosen
+  // body and lets the user deselect some.
   domainIds: string[];
 }
 
 // Story 1.6 — PATCH body. Deliberately excludes firstName/lastName/idNumber
-// (not editable per this story's AC — confirmed with Rachel) and
-// supportedBodyId (handled by its own AddSupportedBodyInput endpoint instead,
-// since linking a second body is additive, not a field replacement).
+// (not editable per this story's AC) and supportedBodyId (handled by its own
+// AddSupportedBodyInput endpoint instead, since linking a second body is
+// additive, not a field replacement).
 export interface UpdateContactInput {
   role?: string;
   phone?: string;
@@ -41,8 +39,8 @@ export interface AddSupportedBodyInput {
 }
 
 // PATCH /contacts/:id/supported-bodies/:supportedBodyId — editing an
-// *existing* link's domain subset after the fact (requested by Rachel: the
-// subset was otherwise only ever choosable once, at creation/add time).
+// *existing* link's domain subset after the fact (it was otherwise only
+// ever choosable once, at creation/add time).
 export interface UpdateSupportedBodyDomainsInput {
   domainIds: string[]; // same subset rule — non-empty, must belong to that SupportedBody
 }

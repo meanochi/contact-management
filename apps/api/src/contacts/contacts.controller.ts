@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Query, Param } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Body, Query, Param } from "@nestjs/common";
 import { JoiValidationPipe } from "../common/pipes/joi-validation.pipe";
 import {
   createContactSchema,
@@ -66,6 +66,13 @@ export class ContactsController {
     @Body(new JoiValidationPipe(updateSupportedBodyDomainsSchema)) body: UpdateSupportedBodyDomainsInput,
   ) {
     return this.contactsService.updateSupportedBodyDomains(id, supportedBodyId, body.domainIds);
+  }
+
+  // Requested by Rachel: the missing counterpart to the POST above — a link
+  // could be added but never removed. No body needed.
+  @Delete(":id/supported-bodies/:supportedBodyId")
+  removeSupportedBody(@Param("id") id: string, @Param("supportedBodyId") supportedBodyId: string) {
+    return this.contactsService.removeSupportedBody(id, supportedBodyId);
   }
 
   // Story 1.7 — action endpoint, not a PATCH field: this is a deliberate

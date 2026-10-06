@@ -75,7 +75,10 @@ export class ContactsService {
       throw new BadRequestException({
         code: "VALIDATION_ERROR",
         message: "חלק מהתחומים שנבחרו אינם שייכים לגוף הנתמך שנבחר",
-        details: [{ field: "domainIds", message: `Not domains of this SupportedBody: ${invalid.join(", ")}` }],
+        // Field-level message (shown directly under the domainIds field via
+        // RHF's setError) — no raw domain ids in it, they're opaque cuid
+        // strings and not meaningful to the user.
+        details: [{ field: "domainIds", message: "תחום שנבחר אינו שייך לגוף הנתמך שנבחר" }],
       });
     }
   }
@@ -152,9 +155,11 @@ export class ContactsService {
         data: {
           firstName: input.firstName,
           lastName: input.lastName,
-          ...(input.idNumber !== undefined ? { idNumber: blankToNull(input.idNumber) } : {}),
-          ...(input.role !== undefined ? { role: blankToNull(input.role) } : {}),
-          ...(input.phone !== undefined ? { phone: blankToNull(input.phone) } : {}),
+          // idNumber/role/phone are required at creation (Joi enforces
+          // non-empty) — no blankToNull needed here, unlike notes below.
+          idNumber: input.idNumber,
+          role: input.role,
+          phone: input.phone,
           emails: input.emails,
           ...(input.notes !== undefined ? { notes: blankToNull(input.notes) } : {}),
           emailOptIn: input.emailOptIn,
@@ -259,6 +264,41 @@ export class ContactsService {
       await tx.contactOnSupportedBodyDomain.deleteMany({ where: { contactId, supportedBodyId } });
       await tx.contactOnSupportedBodyDomain.createMany({
         data: domainIds.map((domainId) => ({ contactId, supportedBodyId, domainId })),
+      });
+    });
+
+    const updated = await prisma.contact.findUnique({ where: { id: contactId }, select: CONTACT_SELECT });
+    if (!updated) {
+      throw new NotFoundException({ code: "NOT_FOUND", message: "איש קשר לא נמצא" });
+    }
+    return toDto(updated);
+  }
+
+  // Requested by Rachel: the missing counterpart to addSupportedBody — a
+  // link, once added, could never be removed. A Contact must always
+  // represent at least one SupportedBody (same rule CreateContactInput's
+  // supportedBodyId enforces at creation — see its comment), so removing the
+  // *last* remaining link is rejected rather than leaving an orphaned Contact.
+  async removeSupportedBody(contactId: string, supportedBodyId: string): Promise<ContactDto> {
+    const linkCount = await prisma.contactOnSupportedBody.count({ where: { contactId } });
+    if (linkCount <= 1) {
+      throw new ConflictException({
+        code: "CONFLICT",
+        message: "לא ניתן להסיר שיוך יחיד — לאיש קשר חייב להיות שיוך לפחות לגוף נתמך אחד",
+      });
+    }
+
+    const link = await prisma.contactOnSupportedBody.findUnique({
+      where: { contactId_supportedBodyId: { contactId, supportedBodyId } },
+    });
+    if (!link) {
+      throw new NotFoundException({ code: "NOT_FOUND", message: "השיוך לגוף הנתמך לא נמצא" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.contactOnSupportedBodyDomain.deleteMany({ where: { contactId, supportedBodyId } });
+      await tx.contactOnSupportedBody.delete({
+        where: { contactId_supportedBodyId: { contactId, supportedBodyId } },
       });
     });
 

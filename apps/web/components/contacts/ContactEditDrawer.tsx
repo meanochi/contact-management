@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { joiResolver } from "@hookform/resolvers/joi";
-import { TextInput, Textarea, Checkbox, Button, Stack, Group, Text, Drawer } from "@mantine/core";
+import { TextInput, Textarea, Checkbox, Button, Stack, Group, Text, Drawer, Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { updateContactSchema } from "@contact-management/shared-schemas/contacts";
 import type { ContactDto } from "@contact-management/shared-schemas/contacts";
@@ -14,6 +14,7 @@ import {
   useUpdateContactMutation,
   useAddSupportedBodyMutation,
   useUpdateSupportedBodyDomainsMutation,
+  useRemoveSupportedBodyMutation,
   useActivateContactMutation,
 } from "@/lib/api/contactsApi";
 import { MarkInactiveModal } from "./MarkInactiveModal";
@@ -30,6 +31,7 @@ function LinkedBodyBlock({
   bodyDomains,
   onSave,
   isSaving,
+  onRemove,
 }: {
   index: number;
   bodyName: string;
@@ -37,6 +39,7 @@ function LinkedBodyBlock({
   bodyDomains: DomainOption[];
   onSave: (domainIds: string[]) => void;
   isSaving: boolean;
+  onRemove: () => void;
 }) {
   const [pending, setPending] = useState<string[]>(domainIds);
   const domainIdsKey = domainIds.join(",");
@@ -49,9 +52,14 @@ function LinkedBodyBlock({
 
   return (
     <Stack gap={4}>
-      <Text size="sm" fw={500}>
-        שיוך {index + 1} — {bodyName}
-      </Text>
+      <Group justify="space-between" gap="xs">
+        <Text size="sm" fw={500}>
+          שיוך {index + 1} — {bodyName}
+        </Text>
+        <Button type="button" size="xs" variant="subtle" color="red" onClick={onRemove}>
+          הסר שיוך
+        </Button>
+      </Group>
       <SupportedBodyDomainsPicker domains={bodyDomains} value={pending} onChange={setPending} />
       {isDirty && (
         <Button
@@ -98,10 +106,15 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
   const [updateContact, { isLoading: isSaving }] = useUpdateContactMutation();
   const [addSupportedBody, { isLoading: isLinking }] = useAddSupportedBodyMutation();
   const [updateSupportedBodyDomains, { isLoading: isSavingDomains }] = useUpdateSupportedBodyDomainsMutation();
+  const [removeSupportedBody, { isLoading: isRemovingBody }] = useRemoveSupportedBodyMutation();
   const [activateContact, { isLoading: isActivating }] = useActivateContactMutation();
   const [addingBodyId, setAddingBodyId] = useState<string | null>(null);
   const [addingDomainIds, setAddingDomainIds] = useState<string[]>([]);
   const [markingInactive, setMarkingInactive] = useState(false);
+  // Requested by Rachel: the missing counterpart to "שייך" — removing a
+  // link is more consequential than toggling a domain pill, so it gets the
+  // same confirm-Modal pattern as SupportedBody's own deactivate flow.
+  const [confirmingRemoveBodyId, setConfirmingRemoveBodyId] = useState<string | null>(null);
   // `contact` is a one-time snapshot passed down from the row that was
   // clicked (ContactsScreen's `editing` state) — it never gets live updates.
   // Every other mutation here closes the Drawer on success, so staleness
@@ -142,6 +155,7 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
       setAddingDomainIds([]);
       setMarkingInactive(false);
       setLinkedOverride(null);
+      setConfirmingRemoveBodyId(null);
     }
   }, [contact, reset]);
 
@@ -209,6 +223,21 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
     }
   };
 
+  const handleRemoveSupportedBody = async () => {
+    if (!confirmingRemoveBodyId) return;
+    try {
+      const result = await removeSupportedBody({ id: contact.id, supportedBodyId: confirmingRemoveBodyId }).unwrap();
+      setLinkedOverride(result.supportedBodyLinks);
+      setConfirmingRemoveBodyId(null);
+    } catch (err) {
+      const body = (err as { data?: ApiErrorBody }).data;
+      // The Service rejects removing a Contact's *last* remaining link
+      // (CONFLICT) — surfaced here with its own Hebrew message, not a
+      // generic fallback.
+      notifications.show({ color: "red", title: "שגיאה", message: body?.error?.message ?? "הסרת השיוך נכשלה — נסה/י שוב" });
+    }
+  };
+
   // Reactivation — not from a story AC, added per Rachel's request (mirrors
   // SupportedBody's own "הפעל מחדש"). No confirm Modal — non-destructive.
   const handleActivate = async () => {
@@ -231,8 +260,8 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
             {contact.firstName} {contact.lastName}
           </Text>
 
-          <TextInput label="תפקיד" {...register("role")} error={errors.role?.message} />
-          <TextInput label="טלפון" {...register("phone")} error={errors.phone?.message} />
+          <TextInput label="תפקיד" required {...register("role")} error={errors.role?.message} />
+          <TextInput label="טלפון" required {...register("phone")} error={errors.phone?.message} />
 
           <Controller
             name="emails"
@@ -312,6 +341,7 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
                   bodyDomains={linkBodyDomains}
                   onSave={(domainIds) => handleSaveLinkDomains(link.supportedBodyId, domainIds)}
                   isSaving={isSavingDomains}
+                  onRemove={() => setConfirmingRemoveBodyId(link.supportedBodyId)}
                 />
               );
             })}
@@ -345,6 +375,28 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
           onClose();
         }}
       />
+
+      <Modal
+        opened={confirmingRemoveBodyId !== null}
+        onClose={() => setConfirmingRemoveBodyId(null)}
+        title="הסרת שיוך לגוף נתמך"
+      >
+        <Stack gap="md">
+          <Text>
+            להסיר את השיוך ל&quot;
+            {supportedBodies.find((b) => b.id === confirmingRemoveBodyId)?.name ?? confirmingRemoveBodyId}
+            &quot;? התחומים שנבחרו עבור השיוך הזה יימחקו גם הם.
+          </Text>
+          <Group justify="flex-end">
+            <Button type="button" variant="default" onClick={() => setConfirmingRemoveBodyId(null)}>
+              ביטול
+            </Button>
+            <Button type="button" color="red" loading={isRemovingBody} onClick={handleRemoveSupportedBody}>
+              הסר שיוך
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Drawer>
   );
 }

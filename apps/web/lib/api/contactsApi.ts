@@ -54,6 +54,11 @@ export const contactsApi = createApi({
       transformResponse: (response: { data: ContactDto }) => response.data,
       invalidatesTags: ["Contact"],
     }),
+    removeSupportedBody: builder.mutation<ContactDto, { id: string; supportedBodyId: string }>({
+      query: ({ id, supportedBodyId }) => ({ url: `/contacts/${id}/supported-bodies/${supportedBodyId}`, method: "DELETE" }),
+      transformResponse: (response: { data: ContactDto }) => response.data,
+      invalidatesTags: ["Contact"],
+    }),
     deactivateContact: builder.mutation<ContactDto, { id: string; input: DeactivateContactInput }>({
       query: ({ id, input }) => ({ url: `/contacts/${id}/deactivate`, method: "POST", body: input }),
       transformResponse: (response: { data: ContactDto }) => response.data,
@@ -73,6 +78,7 @@ export const {
   useUpdateContactMutation,
   useAddSupportedBodyMutation,
   useUpdateSupportedBodyDomainsMutation,
+  useRemoveSupportedBodyMutation,
   useDeactivateContactMutation,
   useActivateContactMutation,
 } = contactsApi;

@@ -116,9 +116,9 @@ export function ContactForm({
           <TextInput label="שם משפחה" required {...register("lastName")} error={errors.lastName?.message} />
         </Group>
 
-        <TextInput label='ת"ז' {...register("idNumber")} error={errors.idNumber?.message} />
-        <TextInput label="תפקיד" {...register("role")} error={errors.role?.message} />
-        <TextInput label="טלפון" {...register("phone")} error={errors.phone?.message} />
+        <TextInput label='ת"ז' required {...register("idNumber")} error={errors.idNumber?.message} />
+        <TextInput label="תפקיד" required {...register("role")} error={errors.role?.message} />
+        <TextInput label="טלפון" required {...register("phone")} error={errors.phone?.message} />
 
         <Controller
           name="supportedBodyId"

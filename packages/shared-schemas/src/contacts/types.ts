@@ -1,12 +1,14 @@
 // Story 1.5. firstName/lastName kept separate (not one combined field) —
 // confirmed with Rachel: the create form collects them as two distinct
-// inputs. idNumber (ת"ז) is optional free text, no format validation.
+// inputs. idNumber (ת"ז) is free text, no format/checksum validation.
+// Revised per Rachel: idNumber/role/phone are required — only notes stays
+// genuinely optional.
 export interface CreateContactInput {
   firstName: string;
   lastName: string;
-  idNumber?: string;
-  role?: string;
-  phone?: string;
+  idNumber: string;
+  role: string;
+  phone: string;
   emails: string[]; // FR-10: at least one, more than one supported
   notes?: string;
   emailOptIn: boolean;

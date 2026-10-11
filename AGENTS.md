@@ -23,6 +23,7 @@ Before writing or reviewing code in this repo, load the relevant `expertise-*` s
 | `expertise-testing` | Any test file or Jest config, TDD workflow, coverage priorities (Jest/RTL for web, `@nestjs/testing` for api). |
 
 Rules:
+- **Mandatory:** before creating, editing, or reviewing any `*.spec.ts`, `*.spec.tsx`, `*.test.ts` or `*.test.tsx` file, or any `jest.config.*`, you MUST load `expertise-testing` first. This applies in `apps/api`, `apps/web` and `packages/*`, and also when the test is only a small part of a larger task. Load it before writing the test, not after.
 - Load every skill that matches the task. Cross-cutting work usually needs `expertise-code-quality` plus one or more domain skills.
 - Each skill states what it does not cover and names the sibling skill to use instead. Follow those pointers rather than guessing.
 - If a skill and the code disagree, say so and ask, instead of silently picking one.

@@ -18,6 +18,9 @@
     "emitDecoratorMetadata": true,
     "target": "ES2023",
     "lib": ["ES2023"],
+    // Explicit so the editor's TS server also sees Jest's globals in *.spec.ts
+    // (otherwise it can report "Cannot find name 'describe'" even though tsc passes).
+    "types": ["node", "jest"],
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./",

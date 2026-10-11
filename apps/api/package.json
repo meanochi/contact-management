@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "jest --passWithNoTests"
+    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --passWithNoTests"
   },
   "dependencies": {
     "@contact-management/db": "*",

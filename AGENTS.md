@@ -8,3 +8,21 @@ Read `docs/README.md` inside that installed package first, then read the relevan
 
 This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
 <!-- END:turborepo-agent-rules -->
+
+# Expertise skills
+
+Before writing or reviewing code in this repo, load the relevant `expertise-*` skill(s) (in `.claude/skills/`). They hold the project's conventions; follow them over general defaults.
+
+| Skill | Use when |
+| --- | --- |
+| `expertise-code-quality` | Any code, in any layer. Baseline principles and the canonical folder/file map (where a new file, service, type, schema, hook or component belongs). |
+| `expertise-nodejs-typescript` | Backend `.ts`/`.js` logic, tsconfig, npm workspaces, `turbo.json`, Joi-schema/TS-type definitions, async/error handling. |
+| `expertise-api-rest` | Anything under `apps/api/src/**`: controllers, services, modules, URL/method/status design, Joi Pipes, response envelope, OpenAPI, versioning, rate limiting. |
+| `expertise-postgres-prisma` | `schema.prisma`, migrations, Prisma queries and Client Extensions, audit trail, soft delete, domain-scoped filtering. |
+| `expertise-react-nextjs` | `apps/web`: React/Next.js components, pages, Mantine (RTL), Redux Toolkit, React Hook Form + Joi, api-client layer. Presentation only, with no Route Handlers or Prisma access. |
+| `expertise-testing` | Any test file or Jest config, TDD workflow, coverage priorities (Jest/RTL for web, `@nestjs/testing` for api). |
+
+Rules:
+- Load every skill that matches the task. Cross-cutting work usually needs `expertise-code-quality` plus one or more domain skills.
+- Each skill states what it does not cover and names the sibling skill to use instead. Follow those pointers rather than guessing.
+- If a skill and the code disagree, say so and ask, instead of silently picking one.

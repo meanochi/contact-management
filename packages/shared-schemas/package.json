@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "jest"
   },
   "dependencies": {
     "joi": "18.2.9"
@@ -22,6 +23,9 @@
   "devDependencies": {
     "@contact-management/config": "*",
     "typescript": "5.9.3",
-    "@types/node": "26.6.4"
+    "@types/node": "26.6.4",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.14",
+    "@types/jest": "30.0.0"
   }
 }

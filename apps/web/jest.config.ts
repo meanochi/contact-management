@@ -6,6 +6,8 @@ const createJestConfig = nextJest({ dir: "./" });
 const config: Config = {
   coverageProvider: "v8",
   testEnvironment: "jsdom",
+  // Form tests type into many Mantine inputs; the 5s default flakes when turbo runs workspaces in parallel.
+  testTimeout: 20000,
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: { "^@/(.*)$": "<rootDir>/$1" },
 };

@@ -6,9 +6,6 @@ dist/
 .next/
 .turbo/
 
-# generated Prisma client
-packages/db/src/generated/
-
 # env
 .env
 .env.*

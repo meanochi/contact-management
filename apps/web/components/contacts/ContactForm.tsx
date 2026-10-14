@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useForm, Controller, useWatch } from "react-hook-form";
-import { joiResolver } from "@hookform/resolvers/joi";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextInput, Textarea, Checkbox, Button, Stack, Group, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { createContactSchema } from "@contact-management/shared-schemas/contacts";
@@ -49,7 +49,7 @@ export function ContactForm({
     setValue,
     formState: { errors, isValid },
   } = useForm<CreateContactInput>({
-    resolver: joiResolver(createContactSchema),
+    resolver: zodResolver(createContactSchema),
     mode: "onChange", // real-time validation, not just on submit — UX-DR12
     defaultValues: {
       firstName: "",
@@ -92,7 +92,7 @@ export function ContactForm({
       const body = (err as { data?: ApiErrorBody }).data;
       if (body?.error?.code === "VALIDATION_ERROR" && Array.isArray(body.error.details)) {
         for (const d of body.error.details) {
-          // Joi reports array-item errors as "emails.0" — there's no such
+          // Zod reports array-item errors as "emails.0" — there's no such
           // RHF field, so collapse any emails.* path onto the array field itself.
           const field = d.field.startsWith("emails") ? "emails" : d.field;
           setError(field as keyof CreateContactInput, { message: d.message });

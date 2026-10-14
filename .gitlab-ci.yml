@@ -11,14 +11,13 @@ stages:
   - build
 
 variables:
-  # `prisma generate` (run automatically by Turborepo's task graph before
-  # build/typecheck/test, see turbo.json) only reads the schema — it never
-  # opens a connection — but prisma.config.ts still requires DATABASE_URL to
-  # be *set*. This placeholder satisfies that without needing a real
+  # packages/db refuses to load without DATABASE_URL being *set*, and the
+  # unit tests import it (the connection pool is lazy and `db` is mocked, so
+  # nothing connects). This placeholder satisfies that without needing a real
   # database in CI. Jobs that would need an actual live Postgres (future
-  # integration tests, per expertise-postgres-prisma) must override this
+  # integration tests, per expertise-postgres-drizzle) must override this
   # with a real GitLab CI/CD variable, not rely on the placeholder below.
-  DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+  DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
 
 workflow:
   rules:

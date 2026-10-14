@@ -1,6 +1,6 @@
 ---
 name: expertise-react-nextjs
-description: 'React/Next.js App Router conventions for apps/web in this project (presentation only — no Route Handlers, no Prisma access, ARCHITECTURE-SPINE.md AD-1): Mantine (incl. RTL setup), Redux Toolkit usage in components, React Hook Form + Joi, and the api-client layer that reaches apps/api. Use when writing or reviewing any React component, page/layout/Server Action, or deciding a client-vs-server component boundary. Do NOT use for: apps/api controller/service/NestJS conventions (expertise-api-rest), generic TypeScript/Node conventions (expertise-nodejs-typescript), Prisma schema/queries (expertise-postgres-prisma), or test file setup (expertise-testing).'
+description: 'React/Next.js App Router conventions for apps/web in this project (presentation only — no Route Handlers, no database access, ARCHITECTURE-SPINE.md AD-1): Mantine (incl. RTL setup), Redux Toolkit usage in components, React Hook Form + Zod, and the api-client layer that reaches apps/api. Use when writing or reviewing any React component, page/layout/Server Action, or deciding a client-vs-server component boundary. Do NOT use for: apps/api controller/service/NestJS conventions (expertise-api-rest), generic TypeScript/Node conventions (expertise-nodejs-typescript), Drizzle schema/queries (expertise-postgres-drizzle), or test file setup (expertise-testing).'
 ---
 
 # React + Next.js App Router Reference (`apps/web` — Contact Management App)
@@ -9,7 +9,7 @@ description: 'React/Next.js App Router conventions for apps/web in this project 
 
 **`apps/web` is presentation only.** It has no Route Handlers and cannot import `packages/db` — all data access goes through `apps/api` (NestJS) over HTTP, via `apps/web/lib/api-client.ts` (`ARCHITECTURE-SPINE.md` AD-1, AD-12). Everything in this file assumes that boundary.
 
-**This project is currently greenfield — no `apps/`/`packages/` code exists yet.** File paths and file trees below (e.g. `app/(internal)/contacts/page.tsx`) describe the canonical structure the first implementation should establish, not files that already exist today. Once a given file exists in the repo, read it and follow its actual shape — these examples stop being the source of truth the moment real code diverges from them.
+**Paths below are real unless marked otherwise.** Existing files (`app/(internal)/contacts/page.tsx`, `components/contacts/ContactForm.tsx`, `lib/api-client.ts`, `lib/api/*Api.ts`, `test-utils/render.tsx`) are the reference — read the actual file and follow its shape; if it has diverged from an example here, the code wins. Examples for screens that don't exist yet (registration queue, admin screens) describe the intended structure.
 
 **Before introducing a new pattern** (a new form-wiring style, a new Redux slice shape, a new layout structure), grep the codebase for an existing example and follow it. Don't invent a second way to do something this project already does one way.
 
@@ -28,34 +28,35 @@ Legend: **[MUST]** = mandatory project rule, non-negotiable without a documented
 
 If none apply, leave it a Server Component — no directive needed.
 
-**Canonical pattern for this app:** a list page like `app/(internal)/contacts/page.tsx` is a Server Component — but it fetches by calling `apps/api` through `lib/api-client.ts` (an `await fetch(...)` during SSR, a real network call — `apps/web` cannot import `packages/db`), then renders a Mantine `Table`. An edit form like `components/contacts/ContactEditForm.tsx` is a Client Component (`useForm`, local modal state, possibly `useSelector`). Once these files exist, check their actual current form before assuming this split still holds.
+**Canonical pattern for this app:** a list page like `app/(internal)/contacts/page.tsx` is a Server Component — but it fetches by calling `apps/api` through `lib/api-client.ts` (an `await fetch(...)` during SSR, a real network call — `apps/web` cannot import `packages/db`), then renders a Mantine `Table`. An edit form like `components/contacts/ContactEditDrawer.tsx` (or `ContactForm.tsx` for creation) is a Client Component (`useForm`, local drawer state, RTK Query hooks). Read the actual file before assuming this split still holds.
 
 **Composition:** a Server Component can render a Client Component (pass serializable props). A Client Component **cannot** `import` and render a Server Component directly — only via `children`/slot props from a parent Server Component. Keep the client boundary as low/leaf as possible: wrap the interactive piece (a form, a filter toolbar), never the whole page.
 
-- **[MUST]** Fetch data in Server Components (via `lib/api-client.ts`, calling `apps/api`) or Server Actions, never in `useEffect`. **[MUST NOT]** import `packages/db`/Prisma anywhere in `apps/web` — it isn't reachable from this app (`ARCHITECTURE-SPINE.md` AD-1); if a file needs it, the logic belongs in `apps/api`, not here.
+- **[MUST]** Fetch data in Server Components (via `lib/api-client.ts`, calling `apps/api`) or Server Actions, never in `useEffect`. **[MUST NOT]** import `packages/db` anywhere in `apps/web` — it isn't reachable from this app (`ARCHITECTURE-SPINE.md` AD-1); if a file needs it, the logic belongs in `apps/api`, not here.
 - **[MUST]** Pass only serializable props Server → Client (plain objects/DTOs — no functions, class instances, or methods).
 - **[MUST NOT]** Call Redux hooks or React Hook Form from a Server Component — they throw or silently no-op.
 - **[MUST NOT]** Mark a whole page `"use client"` because one button needs an `onClick` — extract that button into its own client component.
 
 ## 2. Mutations go through the API, not Server Actions
 
-`apps/api` (NestJS) endpoint conventions (URL/method design, envelope shape, OpenAPI annotation) belong to `expertise-api-rest` — this section only covers *which mechanism* triggers a mutation from `apps/web`, because Next.js offers two ways to trigger one and using both for the same kind of action creates two undocumented, silently-diverging paths. It's a stronger rule here than in a combined app: `apps/web` has no Prisma access at all, so a Server Action attempting a real data mutation has no data layer to reach without also calling out to `apps/api` — there's no shortcut through `packages/db` even if someone tried.
+`apps/api` (NestJS) endpoint conventions (URL/method design, envelope shape, OpenAPI annotation) belong to `expertise-api-rest` — this section only covers *which mechanism* triggers a mutation from `apps/web`, because Next.js offers two ways to trigger one and using both for the same kind of action creates two undocumented, silently-diverging paths. It's a stronger rule here than in a combined app: `apps/web` has no database access at all, so a Server Action attempting a real data mutation has no data layer to reach without also calling out to `apps/api` — there's no shortcut through `packages/db` even if someone tried.
 
 **[MUST] Every data mutation — contact create/edit/status-change, registration-queue approve/reject, domain admin CRUD, the public self-registration submission — goes through an `apps/api` endpoint, called from the client via an RTK Query mutation hook whose `baseQuery` is `lib/api-client.ts`.** This project has already decided its API is a documented, Swagger-annotated surface (`expertise-api-rest`) — routing the same mutations through Server Actions instead would create a second, undocumented way to do the same thing, and RTK Query (§5) needs an HTTP endpoint to call anyway for its cache-invalidation to work across every screen that shows the same data.
 
 ```tsx
-// components/contacts/ContactEditForm.tsx
+// components/contacts/ContactEditDrawer.tsx (simplified)
 "use client";
-import { useForm, Controller } from "react-hook-form";
-import { joiResolver } from "@hookform/resolvers/joi";
-import { contactSchema } from "@contact-management/shared-schemas"; // same schema apps/api validates with
+import { useForm, Controller, type Resolver } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { updateContactSchema } from "@contact-management/shared-schemas/contacts"; // the request schema apps/api validates with
 import { useUpdateContactMutation } from "@/lib/api/contactsApi"; // RTK Query, see §5
 
-export function ContactEditForm({ contact }: { contact: Contact }) {
+// Use the *request* schema (create/update…), never the response schema (`contactSchema`), for a form.
+export function ContactEditDrawer({ contact }: { contact: ContactDto }) {
   const [updateContact, { isLoading, error }] = useUpdateContactMutation();
-  const { control, handleSubmit } = useForm({
-    resolver: joiResolver(contactSchema),
-    defaultValues: contact,
+  const { control, handleSubmit } = useForm<EditFormValues>({
+    resolver: zodResolver(updateContactSchema) as Resolver<EditFormValues>, // see §6 on this cast
+    defaultValues: toFormValues(contact),
   });
 
   return (
@@ -66,7 +67,7 @@ export function ContactEditForm({ contact }: { contact: Contact }) {
 }
 ```
 
-**[MUST]** `apps/api`'s `JoiValidationPipe` re-validates with the same shared Joi schema server-side regardless of what RHF already checked client-side (mechanism: `expertise-api-rest`) — never trust that client-side validation ran, since the endpoint is reachable independently of this form, from a different origin entirely.
+**[MUST]** `apps/api`'s `ZodValidationPipe` re-validates with the same shared Zod schema server-side regardless of what RHF already checked client-side (mechanism: `expertise-api-rest`) — never trust that client-side validation ran, since the endpoint is reachable independently of this form, from a different origin entirely.
 
 **[RECOMMENDED — narrow exception]** A `"use server"` Server Action is acceptable only for a mutation genuinely local to one page's UX with no reason to ever be part of the documented API (e.g. dismissing a client-only UI hint) — essentially none of this app's real data mutations qualify. If you're reaching for one, check first whether it should just be another RTK-Query-backed route instead.
 
@@ -174,17 +175,17 @@ export const contactsApi = createApi({
 
 **[MUST]** `apps/api`'s CORS configuration (AD-12, `expertise-api-rest`) must explicitly allow `apps/web`'s origin — a request failing silently with a CORS error in the browser console, not a clean error envelope, is the signature of this being missed. Check it first if a mutation "does nothing" with no error surfaced through RTK Query.
 
-## 6. React Hook Form + Joi
+## 6. React Hook Form + Zod
 
-This project uses **Joi** (`@hookform/resolvers/joi`), not Zod, despite most current tutorials defaulting to Zod. Schema/DTO structure and client/server schema-sharing conventions live in `expertise-nodejs-typescript` — this section is only the React-side wiring.
+This project uses **Zod 4** (`@hookform/resolvers/zod`) on both client and server. Schema/DTO structure and client/server schema-sharing conventions live in `expertise-nodejs-typescript` — this section is only the React-side wiring. Form value types come from the schema (`z.input`/`z.output`, re-exported from `packages/shared-schemas`), never a hand-written interface.
 
 ```tsx
 import { useForm, Controller } from "react-hook-form";
-import { joiResolver } from "@hookform/resolvers/joi";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextInput, Select } from "@mantine/core";
 
 const { control, register, handleSubmit, formState: { errors } } = useForm({
-  resolver: joiResolver(schema, { abortEarly: false }), // surface all field errors at once
+  resolver: zodResolver(schema), // reports every failing field at once
 });
 
 // Simple text-like inputs: register() works — Mantine forwards a ref and
@@ -202,13 +203,16 @@ const { control, register, handleSubmit, formState: { errors } } = useForm({
 
 - **[MUST]** Use `Controller` for Mantine components whose `onChange` returns a raw value instead of an event object — `Select`, `MultiSelect`, `Autocomplete`, `Combobox`-based inputs, `DatePickerInput`, `Slider`. Plain `register()` can't wire these up.
 - **[RECOMMENDED]** For simple text-like inputs (`TextInput`, `Textarea`, `PasswordInput`, `NumberInput`, `Checkbox`) `register()` works fine — Mantine forwards a ref and fires a native-shaped `onChange` for these. Don't reach for `Controller` by default for every Mantine component; use it where the component's API actually requires it.
-- **[RECOMMENDED]** Pass `{ abortEarly: false }` so multi-field forms (e.g. registration) show every invalid field at once, not one per resubmit.
-- `Joi.string().email({ tlds: false })` avoids false negatives on real addresses from Joi's TLD allowlist.
+- Zod reports every failing field in one pass, so multi-field forms show all invalid fields at once, not one per resubmit — no option needed.
+- **[MUST]** An array item error arrives with the path `emails.0`; there is no such RHF field when the list is rendered as one control, so collapse any `emails.*` path onto the array field itself when mapping server `details` to `setError` (see `ContactForm.tsx`).
+- **[MUST]** A PATCH schema marks every field optional while the edit form always holds all of them. Type the resolver at that one call site (`zodResolver(updateSchema) as Resolver<EditFormValues>`, with a comment) rather than loosening the schema or the form values.
+- Zod's `.email()` is the format check used by both sides; don't add a second regex in a component.
+- **[MUST]** Everything the user can read is Hebrew — labels, toasts, field errors, and the fallbacks for failures. Field and server messages come from the shared schemas and `error.message` (already Hebrew); a toast fallback is written in Hebrew next to the call (`"שמירה נכשלה — נסה/י שוב"`). `app/error.tsx` and `app/not-found.tsx` replace Next.js's English default pages. Don't surface a raw `Error.message` from a thrown exception, a status text or a stack to the user.
 - When a form posts to a Server Action via `useActionState`: RHF owns client-side validation/UX; the action's return value carries server-only validation failures (e.g. a uniqueness check) back into form error state. These are two separate passes — don't conflate them.
 
 ## 7. Routing conventions for this app
 
-Target layout for the first implementation (see the greenfield note above — check the repo for what already exists before assuming a path is still accurate):
+Layout of `apps/web` (existing folders plus the planned public/admin routes — check the repo for what already exists before assuming a path):
 
 ```
 apps/web/
@@ -219,9 +223,9 @@ apps/web/
         page.tsx                # list — Server Component, fetches via lib/api-client.ts
         loading.tsx              # Suspense fallback while page.tsx streams
         error.tsx                 # MUST be "use client" (error boundaries are client-only)
-        [id]/edit/page.tsx       # hosts <ContactEditForm> (client component, calls RTK Query — see §2)
-      registrations/page.tsx     # queue — Server Component list + client filter toolbar
-      domains/page.tsx
+                                 # editing happens in a Drawer (ContactEditDrawer, a client component calling RTK Query — see §2), not a separate route
+      supported-bodies/page.tsx  # list + create/edit drawers (exists)
+      registrations/page.tsx     # (planned, Epic 2) queue — Server Component list + client filter toolbar
     (public)/                   # route group: unauthenticated, no coordinator nav
       register/page.tsx         # public self-registration (client form, calls RTK Query — see §2)
     layout.tsx                  # root: html/body, MantineProvider, DirectionProvider, StoreProvider
@@ -258,7 +262,8 @@ Full Jest/RTL setup, the async-Server-Component testing gap, and stack-specific 
 Before considering a React/Next.js change done, check:
 
 - [ ] New/changed files default to Server Components; `"use client"` only where required, on the smallest leaf
-- [ ] No data fetching in `useEffect`; no Redux or RHF hooks inside a Server Component; no `packages/db`/Prisma import anywhere in `apps/web`
+- [ ] No data fetching in `useEffect`; no Redux or RHF hooks inside a Server Component; no `packages/db` import anywhere in `apps/web`
+- [ ] Forms validate with the *request* schema from `packages/shared-schemas` via `zodResolver` (never the response schema); server `VALIDATION_ERROR` details are mapped back with `setError`
 - [ ] Any new mutation is an `apps/api` endpoint called via RTK Query (through `lib/api-client.ts`) — not a new Server Action (unless it's the genuine §2 narrow exception)
 - [ ] Mutation cache-busting happens through RTK Query tag invalidation, not a reflexive `revalidatePath`/`revalidateTag`; no code assumes a `fetch()` is cached by default without checking the installed Next.js major
 - [ ] Controlled-only Mantine inputs (`Select`/`MultiSelect`/`Combobox`-based/`DatePickerInput`/`Slider`) use `Controller`; simple text-like inputs may use `register()`

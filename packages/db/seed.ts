@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { prisma } from "../src/client";
+import { closeDatabase, db, domains } from "./src/client";
 
 // Story 1.2: one-time seed for sample domains — there is no domain
 // management screen in Epic 1 (ARCHITECTURE-SPINE.md Deferred), so this is
@@ -7,13 +7,10 @@ import { prisma } from "../src/client";
 const SAMPLE_DOMAINS = ["חינוך", "בריאות"];
 
 async function main() {
-  for (const name of SAMPLE_DOMAINS) {
-    await prisma.domain.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
-  }
+  await db
+    .insert(domains)
+    .values(SAMPLE_DOMAINS.map((name) => ({ name })))
+    .onConflictDoNothing({ target: domains.name });
   console.warn(`Seeded ${SAMPLE_DOMAINS.length} domains.`);
 }
 
@@ -23,5 +20,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await closeDatabase();
   });

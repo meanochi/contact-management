@@ -12,9 +12,10 @@ Organizations ("supported bodies") are linked to one or more domains (תחומי
 |---|---|
 | Monorepo | Turborepo 2.x + npm workspaces |
 | Frontend (`apps/web`) | Next.js (App Router), Mantine UI, Redux Toolkit Query, React Hook Form |
-| Backend (`apps/api`) | NestJS, class-based Pipes/Interceptors/Filters |
-| Database | PostgreSQL 17, Prisma ORM |
-| Validation | Joi — one shared schema per resource, used by both the API (server-side) and the client (`joiResolver`) |
+| Backend (`apps/api`) | NestJS, class-based Pipes/Interceptors/Filters, Swagger/OpenAPI (`/docs`), health probes (`/health/*`) |
+| Database | PostgreSQL 17, Drizzle ORM + drizzle-kit migrations |
+| Validation | Zod 4 — one shared schema per resource, used by both the API (`ZodValidationPipe`) and the client (`zodResolver`); TypeScript types and the Swagger docs are derived from the same schemas |
+| Observability | OpenTelemetry (traces + logs, OTLP export) with the Nest logger bridged to the OTel Logs API |
 | Language | TypeScript (strict mode, shared base config in `packages/config`) |
 
 ## Architecture
@@ -24,8 +25,8 @@ apps/
   web/      Next.js client — presentation only, talks to the API over HTTP
   api/      NestJS API — the only consumer of the database
 packages/
-  db/              Prisma schema, migrations, generated client
-  shared-schemas/  Joi validation schemas + TypeScript types, shared by web and api
+  db/              Drizzle schema, SQL migrations (drizzle/), database client
+  shared-schemas/  Zod schemas + the TypeScript types inferred from them, shared by web and api
   ui/              Presentational React components shared by the app's screens
   config/          Shared tsconfig/eslint base configuration
 ```
@@ -56,12 +57,14 @@ packages/
    cp apps/web/.env.example apps/web/.env.local
    ```
 
-4. **Apply database migrations and generate the Prisma client**:
+4. **Apply database migrations and seed the sample domains**:
    ```bash
-   npm run db:migrate:deploy
-   npm run db:generate
+   npm run db:migrate
+   npm run db:seed --workspace=@contact-management/db
    ```
-   (`db:migrate:deploy` applies existing migrations non-interactively — the right choice for a fresh clone. Use `npm run db:migrate --workspace=@contact-management/db` only when you're authoring a *new* migration after changing `schema.prisma`.)
+   (`db:migrate` applies the committed SQL migrations in `packages/db/drizzle/` and is also run automatically before `dev`. To *author* a new migration after changing `packages/db/src/schema/index.ts`, run `npm run db:generate` and commit the generated SQL.)
+
+   > **Upgrading a database created by the old Prisma setup** (it already has the tables and you want to keep its data): run `npm run db:baseline --workspace=@contact-management/db` once. It records the first migration as applied without running it, and `db:migrate` then works normally. A throwaway database can instead be reset with `docker compose down -v && docker compose up -d`.
 
 5. **Start both apps in development mode**:
    ```bash
@@ -69,6 +72,8 @@ packages/
    ```
    - Web: http://localhost:3000
    - API: http://localhost:3001
+   - API docs (Swagger UI): http://localhost:3001/docs — raw OpenAPI at `/docs/json`
+   - Health: http://localhost:3001/health/live and http://localhost:3001/health/ready
 
 ## Available scripts
 
@@ -81,13 +86,12 @@ Run from the repo root — Turborepo fans these out to every workspace that defi
 | `npm run typecheck` | TypeScript type-checking across the monorepo |
 | `npm run lint` | ESLint across the monorepo |
 | `npm run test` | Jest tests across the monorepo |
-| `npm run db:migrate` | Run a new Prisma migration (dev) |
-| `npm run db:migrate:deploy` | Apply existing migrations without creating a new one (used automatically before `dev`) |
-| `npm run db:generate` | Regenerate the Prisma client from the current schema |
+| `npm run db:generate` | Generate a new SQL migration from changes to the Drizzle schema (commit the result) |
+| `npm run db:migrate` | Apply pending migrations (used automatically before `dev`) |
 
 ## Database
 
-- Schema: `packages/db/prisma/schema.prisma`
+- Schema: `packages/db/src/schema/index.ts` — migrations: `packages/db/drizzle/`
 - Soft deletes only — no model is ever hard-deleted. A "removed" `SupportedBody` or `Contact` is marked inactive and remains fully queryable for history.
 - Contact ↔ SupportedBody is many-to-many, and each link carries its own subset of that body's domains — see `ContactOnSupportedBodyDomain` in the schema.
 
@@ -95,4 +99,10 @@ Run from the repo root — Turborepo fans these out to every workspace that defi
 
 Epic 1 (supported body + contact management, no auth/permissions yet) is implemented end-to-end: create/edit/deactivate/reactivate for both supported bodies and contacts, domain-subset management per contact-body link, and search/filter on both list screens. Progress and implementation notes are tracked in `_bmad-output/planning-artifacts/epics/Epic_1.md`.
 
-Known limitation: the audit trail (who changed what, when) is temporarily disabled due to an upstream Prisma 7.10.0 extension-context bug — see the comment in `packages/db/src/client.ts` for the re-enable path once resolved.
+Known limitation: the audit trail (who changed what, when) is not active — the `AuditLog` table exists but nothing writes to it (the previous Prisma extension was disabled, and Drizzle has no equivalent hook). See "Audit trail" in `.claude/skills/expertise-postgres-drizzle/SKILL.md` for the two options (PostgreSQL triggers or an explicit helper).
+
+## Observability, API docs and health
+
+- **Logging / OpenTelemetry** — every request logs an entering and a leaving line with its trace id (`x-trace-id` response header); service-level events are logged with ids only (no personal data). Traces and logs are exported over OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (e.g. `http://localhost:4318`); otherwise logs stay on stdout. `LOG_LEVEL` and `LOG_FORMAT=json` control verbosity/format. Full list of variables in `apps/api/.env.example`; conventions in `.claude/skills/expertise-observability/SKILL.md`.
+- **Swagger** — generated from the same Zod schemas that validate requests, so the docs cannot drift. Off when `NODE_ENV=production` unless `SWAGGER_ENABLED=true`.
+- **Health** — `GET /health/live` (process is up) and `GET /health/ready` (database answers; `503` otherwise). Use them for container/orchestrator probes.

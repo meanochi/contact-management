@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { joiResolver } from "@hookform/resolvers/joi";
+import { useForm, Controller, type Resolver } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextInput, Textarea, Checkbox, Button, Stack, Group, Text, Drawer, Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { updateContactSchema } from "@contact-management/shared-schemas/contacts";
@@ -137,7 +137,9 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
     setError,
     formState: { errors, isValid },
   } = useForm<EditFormValues>({
-    resolver: joiResolver(updateContactSchema),
+    // The PATCH schema marks every field optional; the form always holds all
+    // of them, so the resolver is typed against the form values instead.
+    resolver: zodResolver(updateContactSchema) as Resolver<EditFormValues>,
     mode: "onChange", // real-time validation, not just on submit — UX-DR12
     defaultValues: { role: "", phone: "", emails: [""], notes: "", emailOptIn: false, smsOptIn: false },
   });
@@ -188,7 +190,7 @@ export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | 
       const body = (err as { data?: ApiErrorBody }).data;
       if (body?.error?.code === "VALIDATION_ERROR" && Array.isArray(body.error.details)) {
         for (const d of body.error.details) {
-          // Joi reports array-item errors as "emails.0" — there's no such
+          // Zod reports array-item errors as "emails.0" — there's no such
           // RHF field, so collapse any emails.* path onto the array field itself.
           const field = d.field.startsWith("emails") ? "emails" : d.field;
           setError(field as keyof EditFormValues, { message: d.message });

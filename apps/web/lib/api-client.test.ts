@@ -39,11 +39,11 @@ describe("apiFetch", () => {
       status: 502,
       json: () => Promise.reject(new SyntaxError("Unexpected token <")),
     } as unknown as Response);
-    await expect(apiFetch("/contacts")).rejects.toThrow("Request to /contacts failed (502)");
+    await expect(apiFetch("/contacts")).rejects.toThrow("הבקשה לשרת נכשלה (קוד 502)");
   });
 
   it("falls back to the generic message when the envelope has no message", async () => {
     fetchMock.mockResolvedValue(jsonResponse({}, 500));
-    await expect(apiFetch("/contacts")).rejects.toThrow("Request to /contacts failed (500)");
+    await expect(apiFetch("/contacts")).rejects.toThrow("הבקשה לשרת נכשלה (קוד 500)");
   });
 });

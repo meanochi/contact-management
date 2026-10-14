@@ -1,6 +1,6 @@
 ---
 name: expertise-nodejs-typescript
-description: 'Node.js/TypeScript language and tooling conventions for this project: tsconfig strictness, Joi-schema/TS-type drift, npm workspaces monorepo mechanics, module system, async/error handling, and Node-level security hygiene. Use when writing or reviewing backend .ts/.js logic, npm workspace/turbo.json config, or Prisma/Joi resource type definitions, or when deciding a Node/TypeScript version or tooling question. Not for API route/URL/response-shape design (see expertise-api-rest), React/Next.js component or caching decisions (see expertise-react-nextjs), Prisma schema/query modeling (see expertise-postgres-prisma), or Jest/RTL test setup (see expertise-testing).'
+description: 'Node.js/TypeScript language and tooling conventions for this project: tsconfig strictness, Zod schema → TS type inference, npm workspaces monorepo mechanics, module system, async/error handling, and Node-level security hygiene. Use when writing or reviewing backend .ts/.js logic, npm workspace/turbo.json config, or Zod schema/inferred-type definitions, or when deciding a Node/TypeScript version or tooling question. Not for API route/URL/response-shape design (see expertise-api-rest), React/Next.js component or caching decisions (see expertise-react-nextjs), Drizzle schema/query modeling (see expertise-postgres-drizzle), or Jest/RTL test setup (see expertise-testing).'
 ---
 
 # Node.js + TypeScript Conventions
@@ -13,7 +13,7 @@ Universal engineering principles (simplicity, naming, DRY-as-judgment-call, over
 
 ## Before writing new code
 
-This repo is greenfield — no `apps/`/`packages/` directories exist yet, so there's no existing backend code to check today. The patterns below (tsconfig baseline, `types.ts`/`schema.ts` pairing, workspace layout) are what the *first* implementation should establish. Once real code exists — a committed `tsconfig.json`, a first resource's `types.ts`/`schema.ts` pair, an error-handling wrapper — treat that file as the source of truth over this skill: read it and match its shape before writing a new one, rather than re-deriving the pattern here or drifting into a second convention.
+Read a sibling first: `packages/shared-schemas/src/contacts/` for the schema/type pairing, `apps/api/tsconfig.json` and `packages/config/tsconfig.base.json` for the tsconfig baseline, `apps/api/src/common/` for the error-handling pieces. Where the code and this skill disagree, the committed code is the source of truth — match its shape instead of re-deriving the pattern here, and flag the disagreement so one of them gets fixed.
 
 ## TypeScript: strictness baseline
 
@@ -35,7 +35,7 @@ This repo is greenfield — no `apps/`/`packages/` directories exist yet, so the
 }
 ```
 
-`strict: true` alone is not "fully strict" — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are not part of the `strict` umbrella and are commonly missed. Both matter concretely here: Prisma results are often read via indexing (`results[0]`), and Joi-validated payloads have genuinely optional fields (see the `null`/`undefined` section below).
+`strict: true` alone is not "fully strict" — `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are not part of the `strict` umbrella and are commonly missed. Both matter concretely here: database results are often read via indexing (`rows[0]`), and Zod-validated payloads have genuinely optional fields (see the `null`/`undefined` section below).
 
 - *Project rule:* `tsc --noEmit` is a required CI gate, separate from Jest.
 - *Project rule:* use `unknown` at trust boundaries (parsed JSON, request bodies, external API responses) and narrow explicitly — never `any` as a shortcut, never a file-level `@ts-nocheck` to unblock a PR. A narrowly-scoped `@ts-expect-error` with a comment is acceptable for a genuine library gap.
@@ -45,28 +45,26 @@ This repo is greenfield — no `apps/`/`packages/` directories exist yet, so the
   export type ContactStatus = (typeof ContactStatus)[keyof typeof ContactStatus];
   ```
 
-## Prisma types + Joi validation: keeping them in sync
+## Zod schemas ⇄ TypeScript types ⇄ Drizzle rows
 
-(Prisma schema/model design itself belongs to `expertise-postgres-prisma` — this section is only about the TS-type ⇄ Joi-schema boundary once Prisma models exist.)
+(Table/column design belongs to `expertise-postgres-drizzle` — this section is about the validation boundary and the types derived from it.)
 
-This project deliberately uses **Joi, not Zod** — so, unlike a Zod setup where the schema *is* the type, the TS type and the Joi schema are two separate, hand-maintained artifacts that can silently drift (a field added to one and not the other). Structure this explicitly:
+This project uses **Zod 4** as the single validation library, on both sides of the wire. **The schema is the type**: DTO types are inferred from the schema, so there is no hand-written `types.ts` interface that can drift from validation.
 
-- *Project rule:* colocate per resource at `packages/shared-schemas/<resource>/` (e.g. `packages/shared-schemas/contacts/`) — not inside `apps/web` or `apps/api` — since both `apps/web` (React Hook Form) and `apps/api` (NestJS Pipe validation), two separate applications, must import the same pair (see `expertise-code-quality`'s Project Structure section): `types.ts` (hand-written DTOs — request/response shapes, structurally aligned with the Prisma model where they overlap) and `schema.ts` (Joi schema per operation shape: `createContactSchema`, `updateContactSchema`, …).
-- *Recommendation:* force a compile-time drift check between them, e.g.:
-  ```ts
-  // schema.ts — Record<keyof T, Joi.Schema> fails to compile if a field is
-  // added to/removed from CreateContactInput without updating the schema.
-  export const createContactSchema: Record<keyof CreateContactInput, Joi.Schema> = {
-    fullName: Joi.string().trim().min(1).max(200).required(),
-    emails: Joi.array().items(Joi.string().trim().email()).min(1).required(), // Contact.emails is a list — see expertise-postgres-prisma
-    notes: Joi.string().trim().max(2000).optional(),
-  };
-  ```
-  Wrap it in `Joi.object({...}).required()` at the point it's actually used for runtime validation (for unknown-key stripping etc.) — the `Record` typing above exists purely for the compile-time drift check.
-- *Project rule:* never use a Prisma-generated model type directly as a route handler's request-body type. Prisma types describe what's *in the database*; Joi schemas describe what's *acceptable as input*. Always validate with Joi first, then use the narrower `types.ts` DTO.
-- *Project rule — the most common bug here:* Prisma represents "no value" as `null`; idiomatic optional TS/Joi fields are usually `undefined`. With `exactOptionalPropertyTypes` on, `{ notes: null }`, `{ notes: undefined }`, and `{}` (key absent) are three distinct states, not one. Be deliberate at each boundary:
-  - Prisma → API response: either map `null` to `undefined` for optional DTO fields, or keep the DTO nullable (`notes: string | null`) to match Prisma 1:1 — pick one convention per resource and say so in `types.ts`.
-  - API input → Prisma write: Prisma treats `undefined` as "don't touch this field" on update, and `null` as "set it to NULL" — these are not interchangeable. Joi's `.optional()` should produce "key absent" (→ `undefined`) for partial updates; don't let absent fields get coerced to `null` before calling Prisma.
+- *Project rule:* colocate per resource at `packages/shared-schemas/src/<resource>/` — not inside `apps/web` or `apps/api` — since both `apps/web` (React Hook Form via `zodResolver`) and `apps/api` (`ZodValidationPipe`) import the same schema (`expertise-code-quality`, Project Structure). Each resource folder has:
+  - `schema.ts` — the Zod schemas: one per operation (`createContactSchema`, `updateContactSchema`, `listContactsQuerySchema`, …) **and one per response shape** (`contactSchema`) — the response schema also drives the Swagger docs (`expertise-api-rest`).
+  - `types.ts` — **only** `z.output<typeof schema>` / `z.input<typeof schema>` aliases (plus tiny result wrappers such as `ListContactsResult`). Never write a parallel `interface` by hand.
+  - `index.ts` — `export *` of both, wired into the package's `exports` map.
+- *Project rule:* `z.output` is what a service receives (defaults applied, transforms run); `z.input` is what a form/client sends. Use `output` for service signatures and DTOs; use `input` where a form's field values are typed before validation.
+- *Project rule:* strings from HTTP are coerced in the schema: `z.coerce.number()` for numbers and **`z.stringbool()` for booleans** (never `z.coerce.boolean()` — it turns `"false"` into `true`). Free-text fields that mean "clear this" (notes) accept `""`; the *service* turns it into `null`.
+- *Project rule — every user-visible message is Hebrew* (the users do not read English), and lives in the schema, never in a component. Zod 4 uses the `error` option (`.min(1, { error: "…" })`), not Zod 3's `message`/`errorMap`. Two mechanisms, both in `packages/shared-schemas/src/fields.ts` (imported by every schema file): (1) the Hebrew locale is installed globally (`z.config(z.locales.he())`) so a rule with no explicit message is still Hebrew — technical wording, but never English; (2) user-facing rules get a plain, specific message through the helpers `requiredText(max)`, `requiredChoice(msg)`, `nonEmptyIdList(msg)`, `requiredFlag()` and the `REQUIRED` / `maxLengthMessage` constants. Use the helpers instead of bare `z.string().min(1)` for any field a person types or picks. `hebrew-messages.test.ts` feeds every request schema wrong values and fails if any message has no Hebrew letters — add each new request schema to its list. Technical identifiers in logs and the Swagger text may stay English; anything a person can read in the UI may not.
+- *Project rule:* "at least one field" PATCH schemas use `.refine(...)`; unknown keys are stripped by `z.object` (don't use `.strict()` unless rejecting unknown keys is the actual requirement).
+- *Project rule:* never use a Drizzle row type (`typeof contacts.$inferSelect`) as a request-body type. Row types describe what's *in the database*; schemas describe what's *acceptable as input*. Validate with the schema first, then use its narrower inferred type. Conversely, don't leak a whole row as a response — map to the response DTO (`toDto`).
+- *Project rule — the most common bug here:* SQL "no value" is `null`; idiomatic optional input fields are `undefined`. With `exactOptionalPropertyTypes` on, `{ notes: null }`, `{ notes: undefined }` and `{}` are three distinct states:
+  - Drizzle → API response: DTO fields for nullable columns are `.nullable()` (`notes: string | null`); keep that 1:1 with the column, and say so in the schema.
+  - API input → Drizzle write: in `.set({...})` an omitted key means "leave unchanged" and `null` means "set NULL". Build `.set()` with conditional spreads (`...(input.role !== undefined ? { role: blankToNull(input.role) } : {})`); never assign `undefined`, and don't coerce an absent field to `null`.
+- *Recommendation:* when a rule can't be expressed by the schema (a value must belong to a set only the database knows), keep the schema purely structural and enforce the rest in the service, throwing the same `{ code, message, details }` shape the pipe uses.
+- *Recommendation:* when a form's value type differs from a partial PATCH schema's input type, cast the resolver at the one call site (`zodResolver(schema) as Resolver<FormValues>`) with a comment, instead of weakening the schema.
 
 ## Module system: ESM, with one explicit, bounded exception for `apps/api`
 
@@ -96,30 +94,31 @@ This project deliberately uses **Joi, not Zod** — so, unlike a Zod setup where
   ```ts
   throw new Error("Failed to create contact", { cause: err });
   ```
-- *Recommendation:* distinguish operational errors (a Joi validation failure, a "not found" — expected, handle it and return a proper status) from programmer errors (a `TypeError` from a real bug — let it surface as a logged failure, don't paper over it with a catch-all that returns success).
+- *Recommendation:* distinguish operational errors (a Zod validation failure, a "not found" — expected, handle it and return a proper status) from programmer errors (a `TypeError` from a real bug — let it surface as a logged failure, don't paper over it with a catch-all that returns success).
 - *Recommendation:* `Promise.allSettled` and `Promise.all` answer different questions — pick by whether a partial failure is acceptable, not by habit. Use `allSettled` when the operations are independent and one failing shouldn't stop the others (e.g. notifying several contacts — some emails bouncing shouldn't block the rest). Use `Promise.all` when the operations form one unit of work and any single failure must abort the whole thing (e.g. a multi-step write where a partial result would be invalid data) — `Promise.all`'s fail-fast behavior is the correct choice there, not a legacy option `allSettled` has superseded.
+- Log through Nest's `Logger`, never `console.log` (the lint rule allows only `console.warn`/`console.error`, for the few places outside Nest such as `packages/db`'s pool error handler and `seed.ts`) — see `expertise-observability`.
 - The actual HTTP error-response envelope for route handlers is defined in `expertise-api-rest` — this section is about error-handling discipline in plain TS/Node logic, not the wire format.
 
 ## Security basics (Node/TS-scoped only — there is no dedicated security skill in this project, but keep this section limited to what's genuinely language/runtime-level)
 
-- *Project rule:* Joi validation (the `unknown`-until-validated rule is in the TS/Joi section above; the shared Pipe itself lives in `expertise-api-rest`) is a required security boundary for untrusted input, not just a type-safety nicety — never skip it because a value "looks fine" coming from an internal caller. It is **one layer, not the whole defense**: it doesn't replace authorization checks (the global Guard in `apps/api`, `ARCHITECTURE-SPINE.md` AD-4), DB-level constraints (a `@unique` still matters even though Joi checked shape — see `expertise-postgres-prisma`), or rate limiting on public endpoints (`expertise-api-rest`). A value can be perfectly valid Joi-wise and still be a request from someone who isn't allowed to make it.
-- *Project rule:* secrets (DB connection string, auth secrets, API keys) live only in git-ignored env files — never hard-coded, never logged. Validate required env vars at startup and fail fast rather than discovering a missing secret mid-request.
+- *Project rule:* Zod validation (the `unknown`-until-validated rule is in the Zod section above; the shared Pipe itself lives in `expertise-api-rest`) is a required security boundary for untrusted input, not just a type-safety nicety — never skip it because a value "looks fine" coming from an internal caller. It is **one layer, not the whole defense**: it doesn't replace authorization checks (the global Guard in `apps/api`, `ARCHITECTURE-SPINE.md` AD-4), DB-level constraints (a `UNIQUE` constraint still matters even though Zod checked shape — see `expertise-postgres-drizzle`), or rate limiting on public endpoints (`expertise-api-rest`). A value can be perfectly valid Zod-wise and still be a request from someone who isn't allowed to make it.
+- *Project rule:* secrets (DB connection string, auth secrets, API keys) live only in git-ignored env files — never hard-coded, never logged. The same goes for personal data (names, ID numbers, phones, emails, free text): log ids and counts only (`expertise-observability`). Validate required env vars at startup and fail fast rather than discovering a missing secret mid-request.
 - *Recommendation:* run `npm audit` in CI, keep dependencies current, double-check package names before installing (typosquatting risk). This matters more in an npm workspace monorepo, since a compromised dependency hoisted to the root can be reachable from a sibling workspace that never declared it.
-- *Recommendation:* never build queries via string concatenation — Prisma's query builder already prevents this; don't bypass it with `$queryRawUnsafe` on user input.
+- *Recommendation:* never build queries via string concatenation — Drizzle's query builder and the `sql` tagged template parameterise values; don't bypass them with `sql.raw()` or a hand-built string on user input.
 - *If a file-upload feature is added later* (none planned as of this writing): verify type from magic bytes, not client-supplied MIME/extension; cap size before buffering; store outside the served-static path; never trust a user-supplied filename for the storage path.
 
 ## Code quality for Node.js/TypeScript
 
-- *Recommendation:* keep business logic in pure functions and push I/O (Prisma calls, network requests, `Date.now()`/`process.env` reads) to the edges of a module — a function that both computes and fetches is hard to unit-test without mocking half the runtime. This project's `types.ts`/logic vs. route-handler split is the natural seam: keep the handler thin (parse → call pure logic → persist), not the reverse.
-- *Recommendation:* prefer guard clauses/early returns over nested `if`/`else` or callback pyramids, especially in Joi-validated handlers with several sequential checks (auth → validation → domain rule → not-found) — each check should exit early, not add another nesting level.
+- *Recommendation:* keep business logic in pure functions and push I/O (database calls, network requests, `Date.now()`/`process.env` reads) to the edges of a module — a function that both computes and fetches is hard to unit-test without mocking half the runtime. This project's schema / service / controller split is the natural seam: keep the controller thin (parse → call the service), put rules and data access in the service, and pull pure helpers (`blankToNull`, `containsPattern`, `toDto`) out of the I/O.
+- *Recommendation:* prefer guard clauses/early returns over nested `if`/`else` or callback pyramids, especially in schema-validated handlers with several sequential checks (auth → validation → domain rule → not-found) — each check should exit early, not add another nesting level.
 - *Recommendation:* avoid unexplained string/number literals (a magic `"ADMIN"`, a retry count `3`, a length `200`) scattered across logic — name them as a constant or an `as const` object (per the enum convention above) once a value is checked more than once or its meaning isn't obvious from context alone.
 - *Recommendation:* prefer a small number of narrow, explicit parameters over a single "options bag" with many optional fields — under this project's `exactOptionalPropertyTypes` baseline, an options object multiplies the `null`/`undefined`/absent-key ambiguity described above across every optional field instead of confining it to one documented DTO boundary.
 
 ## Before marking work done
 
 - [ ] `tsc --noEmit` passes under the strict baseline above (no new `any`/`@ts-nocheck` added to get there).
-- [ ] Any new/changed resource has matching `types.ts` fields and Joi schema keys — no silent drift between them.
-- [ ] `null` vs `undefined` handling at the Prisma boundary is deliberate, not accidental, for any field touched.
+- [ ] Any new/changed resource has its Zod schema in `packages/shared-schemas`, and the service and form use the type inferred from it — no hand-written parallel interface.
+- [ ] `null` vs `undefined` handling at the Drizzle boundary is deliberate, not accidental, for any field touched.
 - [ ] Any new dependency is declared in the *specific* workspace package's own `package.json`, not left to hoisting.
 - [ ] No secret is hard-coded or logged; config still comes from env vars.
 - [ ] No error is silently swallowed — every `catch` handles or re-throws (with `cause` where context matters).

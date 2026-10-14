@@ -1,6 +1,6 @@
 ---
 name: expertise-code-quality
-description: 'Universal engineering principles AND project-wide structural conventions for this project: simplicity, maintainability, readability, testability, avoiding over-engineering, plus the canonical folder/file map (shared vs. feature-scoped code, where services/types/schemas/utils/hooks/components live) that any plan or new feature should follow. Use when writing or reviewing ANY code in this repo, in any layer or language, or when deciding where a new file/folder/abstraction belongs. Domain-specific quality practices AND their own file-layout details (API route layout, React component/Redux structure, Prisma package layout, TypeScript resource colocation, test file layout) live in the sibling expertise-nodejs-typescript / expertise-react-nextjs / expertise-postgres-prisma / expertise-testing / expertise-api-rest skills — this file is the shared baseline AND the cross-cutting structural map they all point back to instead of repeating it. Not for stack-specific conventions (versions, library APIs, framework patterns) — those live in the domain skills.'
+description: 'Universal engineering principles AND project-wide structural conventions for this project: simplicity, maintainability, readability, testability, avoiding over-engineering, plus the canonical folder/file map (shared vs. feature-scoped code, where services/types/schemas/utils/hooks/components live) that any plan or new feature should follow. Use when writing or reviewing ANY code in this repo, in any layer or language, or when deciding where a new file/folder/abstraction belongs. Domain-specific quality practices AND their own file-layout details (API route layout, React component/Redux structure, Drizzle package layout, TypeScript resource colocation, test file layout) live in the sibling expertise-nodejs-typescript / expertise-react-nextjs / expertise-postgres-drizzle / expertise-testing / expertise-api-rest skills — this file is the shared baseline AND the cross-cutting structural map they all point back to instead of repeating it. Not for stack-specific conventions (versions, library APIs, framework patterns) — those live in the domain skills.'
 ---
 
 # Code Quality & Project Structure (Project-Wide)
@@ -14,7 +14,9 @@ Applies to every file in this repo, every layer, before any domain-specific skil
 - **Single responsibility.** A function or component owns one concern — one reason to change. Several sequential steps toward that one concern are fine in one function (validate, then save, then return is still "handle the update"); split when it mixes concerns that can change for unrelated reasons (business rule vs. HTTP formatting, data-fetching vs. presentation) — not mechanically whenever a description would use "and."
 - **Meaningful names.** Names say what a thing holds or does. No `data`, `temp`, `handleStuff`, `doThing` for anything non-trivial — a reader shouldn't need to open the implementation to know what a variable is for.
 - **Comments explain WHY, never WHAT.** Well-named code already says what it does. A comment earns its place only for a non-obvious constraint, a workaround for a specific bug, or an invariant a reader would otherwise miss. If deleting the comment wouldn't confuse a future reader, delete it.
-- **Errors fail loudly in development, never leak internals in production.** Don't swallow exceptions silently. Don't let a stack trace, SQL fragment, or internal error message reach an end user (see `expertise-api-rest` for how this project's response envelope enforces that at the API boundary).
+- **Errors fail loudly in development, never leak internals in production.** Don't swallow exceptions silently. Don't let a stack trace, SQL fragment, or internal error message reach an end user (see `expertise-api-rest` for how this project's response envelope enforces that at the API boundary, and `expertise-observability` for how the real error is logged server-side — and why logs themselves must never contain personal data).
+
+- **Operations are observable.** Every operation added to the backend — an endpoint, a state change, a decision the code can refuse, an error path, a job — logs what happened (ids and counts only, never personal data) at the right level, through the framework logger. Logging is part of the operation, like its tests and its error handling; "I'll add logs later" is an unfinished change. Rules, levels and examples: `expertise-observability`.
 
 ## Judgment calls — apply with reasoning, not by rule
 
@@ -24,14 +26,14 @@ Applies to every file in this repo, every layer, before any domain-specific skil
 
 ## Before writing new code
 
-- Check whether this repo already has similar logic once real code exists (it doesn't yet — see each domain skill's greenfield note). Follow an established pattern rather than inventing a parallel "better" one, unless the existing pattern is actually wrong — in which case fix it in place rather than adding a second way to do the same thing.
+- Check whether this repo already has similar logic before writing new code, and follow the established pattern rather than inventing a parallel "better" one — unless the existing pattern is actually wrong, in which case fix it in place rather than adding a second way to do the same thing.
 - Prefer extending or reusing an existing utility over writing a new one that does almost the same thing.
 
 ## Project structure: where things live (project-wide)
 
-> This section is the organizational map — where a file belongs, not how to write it. Each domain skill still owns its own conventions in depth (route layout: `expertise-api-rest`; component/Redux layout: `expertise-react-nextjs`; Prisma/package layout: `expertise-postgres-prisma`; resource type/schema pairing: `expertise-nodejs-typescript`; test file layout: `expertise-testing`) — this section only ties them together so a plan or a new feature doesn't have to reinvent where things go.
+> This section is the organizational map — where a file belongs, not how to write it. Each domain skill still owns its own conventions in depth (route layout: `expertise-api-rest`; component/Redux layout: `expertise-react-nextjs`; Drizzle/package layout: `expertise-postgres-drizzle`; resource type/schema pairing: `expertise-nodejs-typescript`; test file layout: `expertise-testing`) — this section only ties them together so a plan or a new feature doesn't have to reinvent where things go.
 
-**This project is greenfield — no `apps/`/`packages/` exist yet.** The tree below is `ARCHITECTURE-SPINE.md`'s own Structural Seed, filled in with the per-layer locations each domain skill already establishes; set it up as-is on first implementation, don't invent an alternative shape.
+**The layout below is the project's actual structure** (`ARCHITECTURE-SPINE.md`'s Structural Seed, filled in with the per-layer locations each domain skill establishes). Put new code where this map says; if the repo has diverged from it, say so and fix one or the other rather than inventing a third shape.
 
 **Client and server are two separate applications** (`ARCHITECTURE-SPINE.md` AD-1) — `apps/web` (Next.js, presentation only) and `apps/api` (NestJS, the entire API + Service/Domain layer + the only consumer of `packages/db`). They communicate only over HTTP, through `apps/web/lib/api-client.ts` (AD-12).
 
@@ -42,7 +44,7 @@ contact-management/
       app/                         # Presentation — routes/layouts (expertise-react-nextjs §7)
         (internal)/ (public)/
       components/
-        <resource>/                 # feature-scoped components — used by one feature only (e.g. ContactEditForm)
+        <resource>/                 # feature-scoped components — used by one feature only (e.g. ContactEditDrawer)
                                      # generic/shared UI does NOT live here — see packages/ui below
       lib/
         api-client.ts                # the only way apps/web reaches apps/api (expertise-react-nextjs §5)
@@ -54,17 +56,22 @@ contact-management/
       src/
         main.ts                      # bootstrap; CORS enabled here (AD-12)
         app.module.ts                 # root module — imports every resource module
+        app.lifecycle.ts              # graceful shutdown: close the DB pool, flush telemetry
+        telemetry/                    # OpenTelemetry SDK bootstrap + the OTel-bridged logger (expertise-observability)
+        health/                       # /health/live and /health/ready probes (expertise-api-rest)
         <resource>/                   # e.g. contacts/
           <resource>.module.ts         # registers controller+service with Nest's DI — required
           <resource>.controller.ts     # API layer — thin: parse, validate (Pipe), call service, respond
           <resource>.service.ts        # Service/Domain layer — the only code allowed to call packages/db
         common/
-          pipes/                        # JoiValidationPipe (expertise-api-rest)
-          interceptors/                 # ResponseInterceptor (expertise-api-rest)
+          pipes/                        # ZodValidationPipe (expertise-api-rest)
+          interceptors/                 # ResponseInterceptor (expertise-api-rest), LoggingInterceptor (expertise-observability)
           filters/                       # AllExceptionsFilter (expertise-api-rest)
+          swagger/                       # Swagger setup + Zod→OpenAPI helpers (expertise-api-rest)
+        test-utils/                    # shared test helpers, e.g. db-mock (expertise-testing)
   packages/
-    db/                             # Prisma schema/client/extensions — the only PrismaClient, reachable only from apps/api (expertise-postgres-prisma)
-    shared-schemas/<resource>/       # types.ts + schema.ts per resource — imported by apps/web (RHF) and apps/api (Pipes)
+    db/                             # Drizzle schema/client/migrations — the only db handle, reachable only from apps/api (expertise-postgres-drizzle)
+    shared-schemas/src/<resource>/   # Zod schema.ts + types.ts (inferred types) per resource — imported by apps/web (RHF) and apps/api (Pipes, Swagger)
     ui/                             # shared/generic UI: design tokens, Status Badge, Attention Card, Empty State, Dropzone wrapper, Button(primary) — anything used by more than one feature (DESIGN.md); consumed only by apps/web
     config/                          # shared tsconfig/eslint base
 ```
@@ -76,15 +83,15 @@ Code used by exactly one feature lives inside that feature's own folder. The mom
 | Kind of code | Feature-scoped home | Shared home (used by 2+ features) |
 |---|---|---|
 | Business rules / data access | `apps/api/src/<resource>/<resource>.service.ts` | N/A — see "no separate Repository layer" below |
-| Types + Joi schema (DTOs, request/response shapes) | — this pairing is always shared, see below | `packages/shared-schemas/<resource>/{types.ts,schema.ts}` |
+| Zod schema + inferred types (DTOs, request/response shapes) | — always shared, see below | `packages/shared-schemas/src/<resource>/{schema.ts,types.ts}` (types are `z.infer` aliases) |
 | React components | `apps/web/components/<resource>/` | `packages/ui/` (design-system-level pieces — DESIGN.md's Components) |
 | Custom hooks | colocated with the component/feature that uses it | `apps/web/lib/hooks/` |
 | Pure utility functions | colocated in the feature's own folder | `apps/web/lib/utils/` |
-| API-layer cross-cutting helpers (validation Pipe, response Interceptor/Filter, rate-limit Guard) | — always cross-cutting | `apps/api/src/common/` (`expertise-api-rest`) |
+| API-layer cross-cutting helpers (validation Pipe, response/logging Interceptors, exception Filter, Swagger helpers, rate-limit Guard) | — always cross-cutting | `apps/api/src/common/` (`expertise-api-rest`, `expertise-observability`) |
 
-**Why `types.ts`/`schema.ts` live in `packages/shared-schemas`, not inside `apps/web` or `apps/api`:** `expertise-nodejs-typescript` establishes the *pairing pattern* (a hand-written `types.ts` + a `Record`-checked `schema.ts` per resource); this pair must be reachable from both `apps/web` (React Hook Form) and `apps/api` (Pipe validation), two separate applications, which under AD-11 (apps depend on packages, never the reverse) means it has to live in a package, not inside either app. Put the pair at `packages/shared-schemas/<resource>/`.
+**Why the Zod schemas live in `packages/shared-schemas`, not inside `apps/web` or `apps/api`:** `expertise-nodejs-typescript` establishes the pattern (a `schema.ts` of Zod schemas per resource, plus a `types.ts` whose types are inferred from them). Those schemas must be reachable from both `apps/web` (React Hook Form) and `apps/api` (Pipe validation and Swagger generation), two separate applications, which under AD-11 (apps depend on packages, never the reverse) means they have to live in a package, not inside either app. Put them at `packages/shared-schemas/src/<resource>/`.
 
-**No separate Repository layer.** The Service/Domain layer (`apps/api/src/<resource>/<resource>.service.ts`) is the only layer allowed to call `packages/db`, per the architecture's four-layer model — it does both business rules *and* data access in the same module. Where `expertise-postgres-prisma` says "repository-layer helper" or "repository function," that means an ordinary method inside this same service class, not a separate architectural layer — adding one would be a fifth layer nothing in this project's requirements calls for.
+**No separate Repository layer.** The Service/Domain layer (`apps/api/src/<resource>/<resource>.service.ts`) is the only layer allowed to call `packages/db`, per the architecture's four-layer model — it does both business rules *and* data access in the same module. Any skill or note that mentions a "repository" function or helper means an ordinary method inside this same service class (e.g. `loadLinks`, `getDto` in `ContactsService`), not a separate architectural layer — adding one would be a fifth layer nothing in this project's requirements calls for.
 
 ### Layer separation — don't mix concerns across the four layers
 
@@ -97,8 +104,8 @@ Every file belongs to exactly one of Presentation → API → Service/Domain →
 ### Naming
 
 - Folders: kebab-case, plural for a resource's collection folder (e.g. `<resource-plural>/`), matching the URL naming already used in `expertise-api-rest`.
-- Files: PascalCase for a React component (`ContactEditForm.tsx`), camelCase for everything else (`scopeContact.ts`), except NestJS's own resource-prefixed convention in `apps/api` (`contacts.controller.ts`, `contacts.service.ts`, `contacts.module.ts`) — TS-level naming/casing conventions in depth: `expertise-nodejs-typescript`.
-- A resource's name must match across every layer it's referenced in: the Prisma model (PascalCase singular), the URL segment (kebab-case plural), the NestJS module/controller/service file prefix, and the `packages/shared-schemas` folder — a name that drifts between layers is harder to grep and easier to accidentally duplicate.
+- Files: PascalCase for a React component (`ContactEditDrawer.tsx`), camelCase for everything else (`scopeContact.ts`), except NestJS's own resource-prefixed convention in `apps/api` (`contacts.controller.ts`, `contacts.service.ts`, `contacts.module.ts`) — TS-level naming/casing conventions in depth: `expertise-nodejs-typescript`.
+- A resource's name must match across every layer it's referenced in: the Drizzle table (PascalCase singular table name), the URL segment (kebab-case plural), the NestJS module/controller/service file prefix, and the `packages/shared-schemas` folder — a name that drifts between layers is harder to grep and easier to accidentally duplicate.
 
 ### Before adding a new folder, layer, or abstraction
 
@@ -112,5 +119,6 @@ Extends the "Before writing new code" rule above from *logic* to *structure*: be
 - [ ] Is any "shared abstraction" here actually forcing unrelated things together, rather than genuinely removing duplication?
 - [ ] Does any comment just restate what the code already says, instead of explaining a non-obvious reason?
 - [ ] Can any error path fail silently, or leak an internal detail (stack trace, query, secret) to a client or log a non-technical user would see?
+- [ ] Does every new or changed backend operation log its outcome (state change at `log`, refusal at `warn`, failure once at the right level), with ids only and no personal data (`expertise-observability`)?
 - [ ] Does new code sit in the layer/folder the Project Structure map above assigns it to (feature-scoped vs. shared home chosen correctly)?
 - [ ] Was a new top-level folder/package/layer added only after checking the existing structure map had nothing that already fit?

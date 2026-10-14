@@ -1,7 +1,7 @@
 "use client";
 
 import { useForm, Controller } from "react-hook-form";
-import { joiResolver } from "@hookform/resolvers/joi";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextInput, Button, Stack, Alert, Anchor } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { createSupportedBodySchema } from "@contact-management/shared-schemas/supported-bodies";
@@ -33,7 +33,7 @@ export function SupportedBodyForm({ onSuccess }: { onSuccess?: () => void }) {
     setError,
     formState: { errors, isValid },
   } = useForm<CreateSupportedBodyInput>({
-    resolver: joiResolver(createSupportedBodySchema),
+    resolver: zodResolver(createSupportedBodySchema),
     mode: "onChange", // real-time validation, not just on submit — UX-DR12
     defaultValues: { name: "", companyId: "", domainIds: [] },
   });

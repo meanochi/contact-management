@@ -1,126 +1,63 @@
-// Prisma 7's "prisma-client" generator emits client.ts as the entry point,
-// not index.ts — the bare directory import ("./generated/prisma") does not
-// resolve; it must point at the file directly.
-import { Prisma, PrismaClient } from "./generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { auditContext } from "./audit-context";
-
-// Re-exported so consumers (apps/api services) can check error types, e.g.
-// `err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"`
-// — see expertise-api-rest's "translate ORM errors at the Service layer".
-export { Prisma };
-
-const AUDITED_WRITE_OPS = new Set(["create", "update", "delete", "updateMany", "deleteMany"]);
-
-// Prisma's $allOperations spans every model generically — there is no static type
-// linking the string `model` name to its specific delegate. This is a documented
-// limitation of $allModels/$allOperations, not a shortcut, and it's the one place
-// in this codebase where expertise-nodejs-typescript's "no `any`" rule doesn't
-// apply cleanly. Kept isolated to this single structural type instead of `any`.
-type DelegateWithFindUnique = { findUnique: (args: { where: unknown }) => Promise<unknown> };
-type AllOperationsArgs = {
-  model: string;
-  operation: string;
-  args: unknown;
-  query: (args: unknown) => Promise<unknown>;
-};
+import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
+import { Pool } from "pg";
+import * as schema from "./schema";
 
 const databaseUrl = process.env["DATABASE_URL"];
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is not set — refusing to start without a database connection string.");
 }
 
-const adapter = new PrismaPg({ connectionString: databaseUrl });
-const rawClient = new PrismaClient({ adapter });
+// node-postgres treats `?schema=public` (a Prisma-ism) as an unknown
+// connection option; strip it so the same DATABASE_URL keeps working.
+const connectionString = databaseUrl.replace(/[?&]schema=[^&]*/, "").replace(/\?$/, "");
 
-// ============================================================================
-// ⚠️ AUDIT TRAIL TEMPORARILY DISABLED — product decision, 2026-10-04.
-//
-// `Prisma.getExtensionContext(this)` is broken for this exact pattern
-// (query-level $allModels.$allOperations) on the installed Prisma version
-// (7.10.0) — confirmed against a real DB, and matches a known reported
-// Prisma issue (github.com/prisma/prisma/discussions/24178): instead of a
-// usable client/delegate, `this`/getExtensionContext(this) resolves to an
-// empty array. Every write in the app was failing with 500s because of it.
-//
-// Decision: ship without automatic audit logging for now, revisit once a fix
-// or workaround is chosen (candidates discussed: restructure to avoid the
-// broken context lookup, track the active client via AsyncLocalStorage
-// instead, or re-evaluate the Prisma version — none decided yet). The
-// extension logic itself is kept below, intact and unused, specifically so
-// re-enabling it later is a small, reviewable diff — not a rewrite.
-//
-// To re-enable: change the `export const prisma = rawClient;` line below to
-// `export const prisma = buildAuditedClient(rawClient);`, once the
-// getExtensionContext issue is actually fixed.
-// ============================================================================
+const pool = new Pool({ connectionString });
+// An idle client erroring (e.g. the server restarted) emits on the pool; without
+// a listener Node treats it as an uncaught exception and kills the process.
+pool.on("error", (err) => {
+  console.error("Unexpected error on idle PostgreSQL client", err);
+});
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept intact, unused while audit trail is disabled (see note above)
-function buildAuditedClient(client: PrismaClient) {
-  return client.$extends({
-    name: "auditLog",
-    query: {
-      $allModels: {
-        async $allOperations({ model, operation, args, query }: AllOperationsArgs) {
-          if (model === "AuditLog" || !AUDITED_WRITE_OPS.has(operation)) {
-            return query(args);
-          }
+// The only database handle in the system (ARCHITECTURE-SPINE.md AD-5, AD-11)
+// — reachable only from apps/api. Never create a second Pool/drizzle instance
+// anywhere else.
+export const db = drizzle(pool, { schema });
 
-          const userId = auditContext.getStore()?.userId ?? null;
+export type Database = typeof db;
+// What `db.transaction(async (tx) => ...)` hands to its callback.
+export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-          // Prisma.getExtensionContext(this) resolves to whichever client instance
-          // is actually running this operation: the module-level `prisma` for a
-          // standalone call, or the `tx` client when this was invoked inside
-          // prisma.$transaction(async (tx) => ...). Using it (not the outer
-          // `prisma` closure) for both the "before" read and the audit insert is
-          // what makes the audit row participate in the SAME Postgres transaction
-          // as the mutation, automatically, whenever the caller issued the
-          // mutation via `tx`.
-          //
-          // CURRENTLY BROKEN on Prisma 7.10.0 — see the disabled-audit-trail
-          // note above. Do not re-enable without fixing or working around this.
-          const ctx = Prisma.getExtensionContext(this);
-          const delegate = (ctx as unknown as Record<string, DelegateWithFindUnique>)[uncapitalize(model)];
-          if (!delegate) {
-            throw new Error(`Audit extension: no delegate found for model "${model}"`);
-          }
+export * from "./schema";
+// Query operators are re-exported so apps/api never imports drizzle-orm
+// directly — one entry point, one installed copy of the library.
+export { and, asc, count, desc, eq, exists, gte, ilike, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+export { auditContext } from "./audit-context";
 
-          const before =
-            operation === "update" || operation === "delete"
-              ? await delegate.findUnique({ where: (args as { where: unknown }).where })
-              : null;
+const PG_UNIQUE_VIOLATION = "23505";
 
-          const result = await query(args);
-
-          await (
-            ctx as unknown as { auditLog: { create: (a: unknown) => Promise<unknown> } }
-          ).auditLog.create({
-            data: {
-              tableName: model,
-              recordId:
-                (result as { id?: string } | null)?.id ??
-                (args as { where?: { id?: string } })?.where?.id ??
-                "unknown",
-              action: operation.toUpperCase(),
-              before: before ?? undefined,
-              after: operation === "delete" ? undefined : (result as Record<string, unknown>),
-              changedById: userId,
-            },
-          });
-
-          return result;
-        },
-      },
-    },
-  });
+// drizzle-orm wraps driver errors in a DrizzleQueryError whose `cause` is the
+// original pg DatabaseError, so the SQLSTATE can be on either level.
+function pgErrorCode(err: unknown): string | undefined {
+  for (let current: unknown = err, depth = 0; current && depth < 3; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
-function uncapitalize(s: string) {
-  return s.charAt(0).toLowerCase() + s.slice(1);
+// Services translate this into a 409 (expertise-api-rest: "translate ORM
+// errors at the Service layer").
+export function isUniqueViolation(err: unknown): boolean {
+  return pgErrorCode(err) === PG_UNIQUE_VIOLATION;
 }
 
-// The only PrismaClient instance in the system (ARCHITECTURE-SPINE.md AD-5,
-// AD-11) — reachable only from apps/api. Never construct a second PrismaClient
-// anywhere else, even while auditing is disabled — when it's re-enabled, every
-// write must go through this one exported client without exception.
-export const prisma = rawClient;
+// Readiness probe: resolves if the database answers, rejects otherwise.
+export async function pingDatabase(): Promise<void> {
+  await db.execute(sql`select 1`);
+}
+
+export async function closeDatabase(): Promise<void> {
+  await pool.end();
+}

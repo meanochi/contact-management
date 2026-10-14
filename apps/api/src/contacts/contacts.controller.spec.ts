@@ -4,9 +4,10 @@ import request from "supertest";
 import { ContactsController } from "./contacts.controller";
 import { ContactsService } from "./contacts.service";
 import { ResponseInterceptor } from "../common/interceptors/response.interceptor";
+import { LoggingInterceptor } from "../common/interceptors/logging.interceptor";
 import { AllExceptionsFilter } from "../common/filters/all-exceptions.filter";
 
-jest.mock("@contact-management/db", () => jest.requireActual("../test-utils/db-mock").createDbModuleMock());
+jest.mock("@contact-management/db", () => jest.requireActual("../test-utils/db-mock").mockedDbModule());
 
 // HTTP-level test: exercises the real Pipe → Interceptor → Filter pipeline
 // (expertise-testing §1C) with the service mocked.
@@ -29,13 +30,18 @@ describe("ContactsController (HTTP)", () => {
       providers: [{ provide: ContactsService, useValue: service }],
     }).compile();
     app = module.createNestApplication();
-    app.useGlobalInterceptors(new ResponseInterceptor());
+    app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseInterceptor());
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
   });
 
   afterAll(() => app.close());
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    // Request/rejection logs are not under test here; keep the output readable.
+    jest.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
 
   it("GET /contacts returns { data, meta } and passes coerced query values to the service", async () => {
     service.list.mockResolvedValue({ items: [{ id: "c1" }], total: 1, page: 2, pageSize: 5 });

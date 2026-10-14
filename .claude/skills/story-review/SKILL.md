@@ -1,6 +1,6 @@
 ---
 name: story-review
-description: 'Post-story, read-only code review for this project. Runs tsc/lint/jest/prisma validate on touched workspaces, then parallel reviewers (acceptance criteria, API, DB, web, TypeScript/quality, tests, security/edge cases) against the expertise-* skills, and writes a Hebrew report to reviews/. Warns only, never edits source code. Use after finishing a story, or when the user says "review the story", "story review", "run review", or "סקירת קוד".'
+description: 'Post-story, read-only code review for this project. Runs tsc/lint/jest and a drizzle-kit schema/migration consistency check on touched workspaces, then parallel reviewers (acceptance criteria, API, DB, web, TypeScript/quality, tests, security/edge cases) against the expertise-* skills, and writes a Hebrew report to reviews/. Warns only, never edits source code. Use after finishing a story, or when the user says "review the story", "story review", "run review", or "סקירת קוד".'
 ---
 
 # Story Review
@@ -24,13 +24,13 @@ description: 'Post-story, read-only code review for this project. Runs tsc/lint/
 
 ## Step 0: Classify and run tools (deterministic, no LLM guesses)
 
-1. List changed files; classify into areas: `api` (apps/api), `web` (apps/web), `db` (prisma schema/migrations/extensions, packages/*), `tests` (`*.test.ts(x)`), `docs`, `config`.
-2. Ignore generated files (lockfiles, prisma migration SQL beyond a safety glance, generated types, `.next`, `dist`).
+1. List changed files; classify into areas: `api` (apps/api), `web` (apps/web), `db` (packages/db: Drizzle schema, drizzle/ migrations, client), `tests` (`*.test.ts(x)`), `docs`, `config`.
+2. Ignore generated files (lockfiles, generated drizzle migration SQL beyond a safety glance (but DO read it once for destructive statements), generated types, `.next`, `dist`).
 3. For each touched workspace run, read-only, and record pass/fail with the failing output:
    - `npx turbo run lint --filter=<ws>`
    - `npx turbo run test --filter=<ws>` (if a `test` script exists)
    - type-check: `npx tsc --noEmit -p <ws>` (or the workspace's own script)
-   - if schema touched: `npx prisma validate` (and note whether a migration accompanies the schema change)
+   - if `packages/db/src/schema/**` touched: **read-only check** — the same diff must contain a new `packages/db/drizzle/NNNN_*.sql` plus the updated `drizzle/meta/` files; a schema change without them is a Blocker (migration missing). Then run `npx drizzle-kit check` from `packages/db` (verifies the migration history is consistent; it writes nothing). Do **not** run `drizzle-kit generate` or `migrate` — they write files / touch a database. Read the new SQL once for destructive statements (`DROP`, `ALTER … TYPE`, `NOT NULL` without default).
    Before running any `turbo` command, follow AGENTS.md: resolve the installed `turbo` and read its bundled `docs/README.md` if you are unsure of CLI flags. Do not run `build`/`dev` or anything that writes outside build caches.
 4. A failing tool is a **Blocker** finding with the actual output excerpt.
 
@@ -41,13 +41,14 @@ Launch in ONE message, in parallel, only those whose area was touched. Each gets
 | Reviewer | Runs when | Reads | Checks |
 |---|---|---|---|
 | Acceptance Auditor | story file exists | story, `_bmad-output/planning-artifacts/architecture/**/ARCHITECTURE-SPINE.md`, relevant PRD/epic | each AC met (✅/⚠️/❌ + evidence); spine invariants and ADs respected; scope creep |
-| API | `api` | `.claude/skills/expertise-api-rest/SKILL.md` | URL/method/status codes, Joi via Pipes, response/error envelope, OpenAPI docs, versioning, rate limit on public registration |
-| DB | `db` or Prisma usage | `.claude/skills/expertise-postgres-prisma/SKILL.md` | audit-trail extension used, soft-delete, domain-scoped filtering on every query (no cross-domain leaks), migration safety, schema design |
-| Web | `web` | `.claude/skills/expertise-react-nextjs/SKILL.md` | client/server boundary, no Route Handlers or Prisma in web (AD-1), Mantine + RTL, Redux usage, RHF + Joi, api-client layer, accessibility/Hebrew RTL |
-| TS + Quality | any code | `.claude/skills/expertise-nodejs-typescript/SKILL.md`, `.claude/skills/expertise-code-quality/SKILL.md` | strictness, `any`, Joi-schema vs TS-type drift, async/error handling, file placement per the structural map, simplicity, duplication, over-engineering, performance (N+1, re-renders) |
-| Tests | any code | `.claude/skills/expertise-testing/SKILL.md` (skip TDD rules) | tests exist for new logic and critical paths, co-location, shared render wrapper, no async Server Component render, Prisma mocking approach, tests actually assert something |
+| API | `api` | `.claude/skills/expertise-api-rest/SKILL.md` | URL/method/status codes, Zod via `ZodValidationPipe`, response/error envelope, Swagger helpers on every endpoint (check `/docs/json` shape if runnable), health probes untouched or extended correctly, logging per `expertise-observability`, versioning, rate limit on public registration |
+| DB | `db` or Drizzle usage in `apps/api` | `.claude/skills/expertise-postgres-drizzle/SKILL.md` | soft-delete, multi-table writes in one `db.transaction` on `tx`, unique/not-found translation, no N+1, `updatedAt` set on every update, escaped `ilike` terms, domain-scoped filtering on every query (no cross-domain leaks), migration committed and safe, no false "audited automatically" claims |
+| Web | `web` | `.claude/skills/expertise-react-nextjs/SKILL.md` | client/server boundary, no Route Handlers or `packages/db` in web (AD-1), Mantine + RTL, Redux usage, RHF + Zod (`zodResolver`), api-client layer, accessibility/Hebrew RTL |
+| TS + Quality | any code | `.claude/skills/expertise-nodejs-typescript/SKILL.md`, `.claude/skills/expertise-code-quality/SKILL.md` | strictness, `any`, hand-written types duplicating a Zod schema (types must be `z.infer` aliases), async/error handling, file placement per the structural map, simplicity, duplication, over-engineering, performance (N+1, re-renders) |
+| Tests | any code | `.claude/skills/expertise-testing/SKILL.md` (skip TDD rules) | tests exist for new logic and critical paths, co-location, shared render wrapper, no async Server Component render, `db-mock` approach for services (assertions on generated SQL), logging silenced in specs, tests actually assert something |
 | Security + Edge cases | any code | `.claude/skills/bmad-review-edge-case-hunter/SKILL.md` + OWASP-style checks | authz, input validation, cross-domain data exposure, secrets in code, null/empty/boundary/race conditions, error paths |
-| Docs | docs or API changed | existing API spec / README files in repo | API spec and docs updated to match behavior |
+| Docs | docs or API changed | README, `docs/`, Swagger (`/docs`) | README/docs and Swagger annotations updated to match behavior |
+| Observability | `api` code touched | `.claude/skills/expertise-observability/SKILL.md` | new state changes logged with ids only, refusals at `warn`, no personal data in any log/span, no `console.log`, `instrumentation` import still first in `main.ts` |
 
 Finding schema each reviewer returns:
 `severity | area | file:line | quoted snippet | what is wrong and why it matters (1-2 sentences) | rule violated (skill + section) | suggested fix (text only)`
@@ -66,7 +67,7 @@ Severity: **Blocker** (bug, security/domain-isolation breach, missing audit-trai
 ### Terminal (max ~10 lines, Hebrew)
 - Verdict: ✅ נקי / ⚠️ יש הערות / 🛑 יש Blockers
 - Counts: Blocker n · High n · Medium n · Low n · (Plausible n)
-- Tools: tsc ✅/❌ · lint ✅/❌ · tests ✅/❌ (n failed) · prisma ✅/❌/—
+- Tools: tsc ✅/❌ · lint ✅/❌ · tests ✅/❌ (n failed) · migrations ✅/❌/—
 - One line per Blocker and High
 - Path to the full report
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { joiResolver } from "@hookform/resolvers/joi";
+import { useForm, Controller, type Resolver } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { TextInput, Button, Stack, Alert, Anchor, Drawer, Group, Modal, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { updateSupportedBodySchema } from "@contact-management/shared-schemas/supported-bodies";
@@ -55,7 +55,9 @@ export function SupportedBodyEditDrawer({
     setError,
     formState: { errors, isValid },
   } = useForm<EditFormValues>({
-    resolver: joiResolver(updateSupportedBodySchema),
+    // The PATCH schema marks every field optional; the form always holds all
+    // of them, so the resolver is typed against the form values instead.
+    resolver: zodResolver(updateSupportedBodySchema) as Resolver<EditFormValues>,
     mode: "onChange", // real-time validation, not just on submit — UX-DR12
     defaultValues: { name: "", companyId: "", domainIds: [] },
   });

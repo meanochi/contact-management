@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
-    "./domains": "./dist/domains/types.js",
+    "./domains": "./dist/domains/index.js",
     "./supported-bodies": "./dist/supported-bodies/index.js",
     "./contacts": "./dist/contacts/index.js"
   },
@@ -17,15 +17,15 @@
     "lint": "eslint .",
     "test": "jest"
   },
-  "dependencies": {
-    "joi": "18.2.9"
-  },
   "devDependencies": {
     "@contact-management/config": "*",
-    "typescript": "5.9.3",
+    "@types/jest": "30.0.0",
     "@types/node": "26.6.4",
     "jest": "30.5.2",
     "ts-jest": "29.4.14",
-    "@types/jest": "30.0.0"
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
   }
 }

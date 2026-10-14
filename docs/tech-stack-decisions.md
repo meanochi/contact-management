@@ -168,6 +168,8 @@
 
 ## 8. pg (node-postgres) + Prisma — גישה למסד הנתונים
 
+> ⚠️ **הוחלף ב-13/10/2026 — Prisma הוסרה, במקומה Drizzle ORM.** ר' "סעיף 8א" מיד אחרי סעיף זה. הסעיף המקורי נשמר כתיעוד היסטורי של הנימוקים.
+
 **מה זה:**
 - **PostgreSQL** ("Postgres") — מסד הנתונים היחסי עצמו (איפה שהמידע נשמר בפועל: אנשי קשר, גופים, משתמשים...).
 - **pg** — ספריית Node.js "גולמית" לתקשורת ישירה עם Postgres (שולחים שאילתת SQL, מקבלים תוצאה).
@@ -190,7 +192,25 @@
 
 ---
 
+## 8א. Drizzle ORM + drizzle-kit — גישה למסד הנתונים (הוחלט 13/10/2026, במקום Prisma)
+
+**מה השתנה:** Prisma הוחלפה ב-**Drizzle ORM** (עם `pg` כדרייבר) ו-**drizzle-kit** ליצירה והרצה של migrations. הסכמה כתובה ב-TypeScript (`packages/db/src/schema/index.ts`), שאילתות נכתבות כ-query builder הקרוב ל-SQL, וקבצי ה-migration הם קובצי SQL רגילים בתיקיית `packages/db/drizzle/` (נשמרים ב-git).
+
+**למה:**
+- אין שלב `generate` ואין קוד שנוצר אוטומטית — הסכמה היא קוד TypeScript רגיל, והטיפוסים נגזרים ממנה ישירות. זה גם הסיר את התלות של `turbo` ב-`db:generate` לפני כל build/test.
+- שאילתות שקופות: רואים בדיוק איזה SQL נשלח (ובבדיקות היחידה אנחנו מוודאים את ה-SQL עצמו, ראו `expertise-postgres-drizzle`).
+- ה-`$extends` של Prisma, שעליו נשען ה-Audit Trail, כבר היה מושבת בגלל באג (ר' README), כך שההחלפה לא איבדה יכולת פעילה.
+
+**מה חשוב לדעת (חסרונות / מחיר):**
+- ל-Drizzle אין מנגנון "יירוט שאילתות" כמו Client Extensions, ולכן **ה-Audit Trail עדיין לא פעיל** והוא החלטה פתוחה: טריגרים ב-PostgreSQL (מומלץ — אטומי ומכסה גם כתיבות מחוץ לאפליקציה) או פונקציית עזר מפורשת בשירותים.
+- שמות הטבלאות והעמודות נשמרו זהים ל-Prisma, אך ה-migration הראשוני (`0000_init.sql`) יוצר את הטבלאות מחדש — במסד פיתוח קיים צריך לאפס (ר' README).
+- שגיאות מהדרייבר מגיעות עטופות (`DrizzleQueryError.cause`) — הפונקציה `isUniqueViolation` ב-`packages/db` מטפלת בזה במקום אחד.
+
+---
+
 ## 9. Joi — ואלידציה (בדיקת תקינות קלט)
+
+> ⚠️ **הוחלף ב-13/10/2026 — Joi הוסרה, במקומה Zod 4.** ר' "סעיף 9א" מיד אחרי סעיף זה. החסרונות שמופיעים כאן (טיפוסים נכתבים בנפרד, תיעוד Swagger ידני) הם בדיוק מה ש-Zod פותרת.
 
 **מה זה:** ספרייה להגדרת "כללים" למידע נכנס (למשל: "שדה email חייב להיות בפורמט אימייל תקין", "שדה phone הוא מחרוזת חובה") ולבדוק לפיהם קלט שמגיע מהמשתמש (בטופס) או מבקשת API, **לפני** שהוא נכנס למסד הנתונים.
 
@@ -205,6 +225,19 @@
 - זה גם משפיע ישירות על ה-Swagger/OpenAPI (תיעוד ה-API): עם Zod יש כלים שמייצרים את מסמך ה-OpenAPI **אוטומטית** מתוך סכימות הואלידציה. עם Joi, ניצור את תיעוד ה-Swagger בנפרד (ראו שאלה בהמשך ההודעה).
 
 **חלופות שנשקלו:** Zod (הכי נפוץ כיום בפרויקטי TypeScript חדשים, בזכות ה"אינטגרציה" עם טיפוסים), Yup (דומה ל-Joi, פחות נפוץ כיום).
+
+---
+
+## 9א. Zod 4 — ואלידציה וטיפוסים ממקור אחד (הוחלט 13/10/2026, במקום Joi)
+
+**מה השתנה:** כל סכימות הקלט והפלט ב-`packages/shared-schemas` נכתבות ב-**Zod**. אותה סכימה משמשת: את ה-`ZodValidationPipe` בשרת, את `zodResolver` של React Hook Form בקלינט, ואת מסמך ה-Swagger.
+
+**למה:**
+- **הטיפוס נגזר מהסכימה** (`z.infer`) — אין עוד ממשק TypeScript שנכתב ידנית ויכול "לברוח" מכללי הואלידציה. קבצי `types.ts` הם עכשיו כינויים בלבד.
+- **Swagger נוצר מהסכימות** (`z.toJSONSchema`) — אין מחלקות DTO עם `@ApiProperty` שצריך לתחזק ידנית.
+- הודעות השגיאה בעברית מוגדרות בסכימה במקום אחד.
+
+**נקודות תשומת לב:** פרמטרים ב-query מגיעים כמחרוזות — משתמשים ב-`z.coerce.number()` ובמיוחד ב-`z.stringbool()` לבוליאנים (`z.coerce.boolean()` הופך את `"false"` ל-`true`). Zod מסירה שדות לא מוכרים כברירת מחדל, בדומה ל-`stripUnknown` שהיה ב-Joi.
 
 ---
 
@@ -290,12 +323,33 @@
 | ניהול טפסים | React Hook Form |
 | ספריית UI | Mantine |
 | State management | Redux Toolkit (RTK Query מול `apps/api`) |
-| מסד נתונים | PostgreSQL, גישה דרך Prisma (+`pg`) — נגיש רק מ-`apps/api` |
-| ואלידציה | Joi (משותף בין `apps/web` ל-`apps/api` דרך `packages/shared-schemas`) |
+| מסד נתונים | PostgreSQL, גישה דרך **Drizzle ORM** (+`pg`, migrations ב-drizzle-kit) — נגיש רק מ-`apps/api` — עודכן 13/10/2026, ר' סעיף 8א |
+| ואלידציה | **Zod 4** (משותף בין `apps/web` ל-`apps/api` דרך `packages/shared-schemas`; הטיפוסים וה-Swagger נגזרים ממנו) — עודכן 13/10/2026, ר' סעיף 9א |
+| לוגים / Observability | **OpenTelemetry** (traces + logs, ייצוא OTLP), לוג כניסה/יציאה לכל route — חדש 13/10/2026, ר' סעיף 13 |
+| Healthcheck | `/health/live` + `/health/ready` — חדש 13/10/2026, ר' סעיף 14 |
 | בדיקות יחידה | Jest (React Testing Library ב-`apps/web`, `@nestjs/testing` ב-`apps/api`) |
-| תיעוד API | `@nestjs/swagger` (decorator-based) — עודכן 24/09/2026, ר' סעיף 12 |
+| תיעוד API | `@nestjs/swagger`, **נוצר מסכימות Zod**, זמין ב-`/docs` — עודכן 13/10/2026, ר' סעיף 14 |
 | סגנון API | REST |
 | נקודת כניסה ל-BMAD | ישר ל-PRD (John), ללא שלב Analyst מקדים |
+
+## 13. לוגים ו-OpenTelemetry (הוחלט 13/10/2026)
+
+**מה:** שכבת ה-Observability של `apps/api` בנויה על **OpenTelemetry**: SDK שמופעל לפני כל import אחר (`src/telemetry/instrumentation.ts`), אינסטרומנטציה אוטומטית ל-HTTP, Express, NestJS ו-`pg`, ו-`OtelLogger` שמחבר את ה-`Logger` של Nest ל-Logs API של OpenTelemetry. כל שורת לוג בתוך בקשה נושאת `trace_id`/`span_id` אוטומטית; ה-`trace_id` חוזר גם בכותרת התשובה `x-trace-id`.
+
+**מה נרשם:** שורת כניסה ושורת יציאה לכל route (`--> GET /contacts` / `<-- GET /contacts 200 12ms`) באמצעות `LoggingInterceptor` גלובלי, לוג של כל שגיאה (4xx ב-`warn` לפי קוד בלבד, 5xx ב-`error` עם stack), ולוגים של אירועים עסקיים בשירותים (יצירה, עדכון, השבתה, שיוך, סירובים).
+
+**פרטיות:** לא נרשם שום מידע אישי (שמות, ת"ז, טלפונים, מיילים, מונחי חיפוש, גוף בקשה, query string) — רק מזהים וספירות, והנתיב נרשם כתבנית (`/contacts/:id`). זה כלל מחייב ב-`expertise-observability`.
+
+**ייצוא:** כשמוגדר `OTEL_EXPORTER_OTLP_ENDPOINT` (למשל collector על `http://localhost:4318`) — traces ו-logs נשלחים ב-OTLP/HTTP; אחרת הכול נשאר ב-stdout ולא יוצאת תעבורת רשת. הגדרות נוספות: `LOG_LEVEL`, `LOG_FORMAT=json`, `OTEL_SERVICE_NAME`.
+
+---
+
+## 14. Swagger/OpenAPI ו-Healthcheck (הוחלט 13/10/2026)
+
+- **Swagger** ב-`/docs` (ו-`/docs/json`), נוצר מסכימות ה-Zod דרך helper-ים ב-`common/swagger/zod-openapi.ts`. כבוי ב-`NODE_ENV=production` אלא אם `SWAGGER_ENABLED=true`.
+- **Healthcheck:** `GET /health/live` (התהליך חי, לא נוגע בתלויות — כדי שנפילת DB לא תגרום להריגת התהליך) ו-`GET /health/ready` (מבצע `select 1` מול ה-DB עם timeout של 2 שניות; `503` אם אין מענה, בלי לחשוף את שגיאת הדרייבר). מיועדים ל-probes של Docker/Kubernetes/load balancer.
+
+---
 
 ## החלטות שעדיין פתוחות ⚠️
 

@@ -9,27 +9,27 @@
     ".": "./dist/client.js"
   },
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev && prisma generate",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio",
-    "db:seed": "prisma db seed",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx seed.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:baseline": "tsx baseline.ts"
   },
   "dependencies": {
-    "@prisma/client": "7.10.0",
-    "@prisma/adapter-pg": "7.10.0",
+    "drizzle-orm": "0.45.4",
     "pg": "8.23.1"
   },
   "devDependencies": {
     "@contact-management/config": "*",
-    "prisma": "7.10.0",
-    "typescript": "5.9.3",
     "@types/node": "26.6.4",
     "@types/pg": "8.23.1",
     "dotenv": "18.0.5",
-    "tsx": "4.23.15"
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
   }
 }

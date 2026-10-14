@@ -3,6 +3,7 @@ module.exports = {
   testEnvironment: "node",
   rootDir: "src",
   testRegex: ".*\.spec\.ts$",
+  setupFiles: ["<rootDir>/test-utils/set-env.ts"],
   moduleFileExtensions: ["js", "json", "ts"],
   // Transpile-only (isolatedModules): ts-jest's type-checking mode can't
   // resolve NodeNext package "exports" subpaths (e.g. shared-schemas/contacts).

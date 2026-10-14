@@ -1,6 +1,6 @@
 # מה זה "סקילי מומחיות" ולמה בנינו אותם
 
-> מסמך זה בעברית, בשפה פשוטה, מסביר את חמשת קבצי ה-Skill החדשים שנוספו לפרויקט תחת `.claude/skills/expertise-*`. אלה **לא** סקילי BMAD (שמנהלים תהליך עבודה כמו כתיבת PRD) — אלה קבצי **ידע טכני** שנטענים אוטומטית כשעובדים על קוד בתחום מסוים.
+> מסמך זה בעברית, בשפה פשוטה, מסביר את קבצי ה-Skill של המומחיות שנוספו לפרויקט תחת `.claude/skills/expertise-*`. אלה **לא** סקילי BMAD (שמנהלים תהליך עבודה כמו כתיבת PRD) — אלה קבצי **ידע טכני** שנטענים אוטומטית כשעובדים על קוד בתחום מסוים.
 
 ## מה זה בכלל "Skill"?
 
@@ -8,13 +8,16 @@ Skill הוא קובץ הוראות (`SKILL.md`) שיושב בתיקיית `.clau
 
 **למה זה שונה מפשוט "לזכור" דברים?** כי שיחה עם Claude לא "נשארת בזיכרון" לצמיתות — כל סשן חדש הוא התחלה נקייה. קובץ Skill הוא הדרך לקבע ידע **בפרויקט עצמו** (נשמר ב-git, נגיש לכל מי שיעבוד על הקוד — כולל אתכן, וכולל Claude בסשנים עתידיים), כדי שלא נצטרך "לחקור מחדש" את אותם הדברים כל פעם.
 
-## חמשת הסקילים שנוצרו, ולמה כל אחד
+## הסקילים שנוצרו, ולמה כל אחד
+
+> **עודכן 13/10/2026:** `expertise-postgres-prisma` הוחלף ב-`expertise-postgres-drizzle` (Prisma ← Drizzle), Joi הוחלף ב-Zod בכל הסקילים, ונוסף הסקיל `expertise-observability` (לוגים ו-OpenTelemetry). `expertise-api-rest` כולל כעת גם Swagger שנוצר מ-Zod וגם healthcheck.
 
 | סקיל | תחום | נטען אוטומטית כש... |
 |---|---|---|
 | `expertise-nodejs-typescript` | Node.js + TypeScript | כותבים קוד שרת/לוגיקה כללית, מגדירים workspace |
 | `expertise-react-nextjs` | React + Next.js (App Router) | כותבים קומפוננטת React, route, layout |
-| `expertise-postgres-prisma` | PostgreSQL + Prisma | כותבים/משנים סכימת מסד נתונים, migration, שאילתה |
+| `expertise-postgres-drizzle` | PostgreSQL + Drizzle | כותבים/משנים סכימת מסד נתונים, migration, שאילתה |
+| `expertise-observability` | לוגים + OpenTelemetry | מוסיפים/בודקים לוגים, נוגעים ב-`apps/api/src/telemetry`, מגדירים collector |
 | `expertise-testing` | Jest + React Testing Library | כותבים קובץ בדיקה (test) |
 | `expertise-api-rest` | עיצוב API בסגנון REST | כותבים/בודקים route של API |
 
@@ -24,7 +27,7 @@ Skill הוא קובץ הוראות (`SKILL.md`) שיושב בתיקיית `.clau
 
 זו בדיוק הסיבה שביקשתן "לחקור על השפה, הספריות" — המחקר לא היה רק "אישוש" של מה שכבר החלטנו, הוא **מצא באמת דברים שצריך לדעת**:
 
-1. **Prisma הסירו לגמרי (לא רק "ממליצים נגד") את ה-API הישן (`$use`) שתיארנו ביומן ההחלטות לצורך ה-Audit Trail האוטומטי.** הגרסה הנוכחית (Prisma 7) חייבת להשתמש ב-API חדש בשם Client Extensions (`$extends`). זה לא עניין של טעם — הקוד הישן פשוט לא יעבוד. עדכנו את זה בסקיל, וצריך לעדכן גם ביומן ההחלטות.
+1. **(היסטורי — הפרויקט עבר מאז ל-Drizzle, ר' למעלה)** **Prisma הסירו לגמרי (לא רק "ממליצים נגד") את ה-API הישן (`$use`) שתיארנו ביומן ההחלטות לצורך ה-Audit Trail האוטומטי.** הגרסה הנוכחית (Prisma 7) חייבת להשתמש ב-API חדש בשם Client Extensions (`$extends`). זה לא עניין של טעם — הקוד הישן פשוט לא יעבוד. עדכנו את זה בסקיל, וצריך לעדכן גם ביומן ההחלטות.
 2. **הכלי ש"תכננו" להשתמש בו לתיעוד Swagger (`next-swagger-doc`) לא עודכן כבר יותר משנה**, בעוד שיש כלי מתחרה פעיל ומתוחזק (`next-openapi-gen`) שבנוי במיוחד בשביל Next.js App Router. שווה לשקול מעבר לפני שמתחילים לכתוב קוד.
 3. **Mantine (ספריית ה-UI) עברו מ-Emotion ל-CSS Modules**, ומנגנון ה-RTL הנכון היום הוא קומפוננטה ייעודית בשם `DirectionProvider` — לא מה שהיה נהוג קודם.
 4. **Next.js שינו את שם קובץ ה-Middleware** (מ-`middleware.ts` ל-`proxy.ts`) בגרסה האחרונה — משפיע ישירות על שכבת אכיפת ההרשאות המרכזית שתכננו.
@@ -58,6 +61,7 @@ description: 'Node.js/TypeScript conventions and current best practices for this
 
 - `.claude/skills/expertise-nodejs-typescript/SKILL.md`
 - `.claude/skills/expertise-react-nextjs/SKILL.md`
-- `.claude/skills/expertise-postgres-prisma/SKILL.md`
+- `.claude/skills/expertise-postgres-drizzle/SKILL.md`
+- `.claude/skills/expertise-observability/SKILL.md`
 - `.claude/skills/expertise-testing/SKILL.md`
 - `.claude/skills/expertise-api-rest/SKILL.md`

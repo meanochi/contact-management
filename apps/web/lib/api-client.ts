@@ -12,7 +12,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
-    throw new Error(body?.error?.message ?? `Request to ${path} failed (${res.status})`);
+    throw new Error(body?.error?.message ?? `הבקשה לשרת נכשלה (קוד ${res.status}) — נסו שוב`);
   }
 
   return res.json() as Promise<T>;

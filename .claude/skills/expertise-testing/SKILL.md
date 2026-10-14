@@ -1,6 +1,6 @@
 ---
 name: expertise-testing
-description: 'Jest/React Testing Library conventions for apps/web (Next.js, Mantine, Redux Toolkit), and @nestjs/testing conventions for apps/api (NestJS, Prisma, Joi), TDD workflow, and coverage priorities. Use when writing or changing any *.test.ts(x) file, Jest config, or deciding what/how to test a new feature or bug fix, in either app. Not for E2E/Playwright test design, general component/API/schema conventions (see expertise-react-nextjs, expertise-api-rest, expertise-postgres-prisma), or non-test TypeScript conventions (see expertise-nodejs-typescript).'
+description: 'Jest/React Testing Library conventions for apps/web (Next.js, Mantine, Redux Toolkit), and @nestjs/testing conventions for apps/api (NestJS, Drizzle, Zod), TDD workflow, and coverage priorities. Use when writing or changing any *.test.ts(x) file, Jest config, or deciding what/how to test a new feature or bug fix, in either app. Not for E2E/Playwright test design, general component/API/schema conventions (see expertise-react-nextjs, expertise-api-rest, expertise-postgres-drizzle), or non-test TypeScript conventions (see expertise-nodejs-typescript).'
 ---
 
 # Testing: Jest (+ React Testing Library in `apps/web`, `@nestjs/testing` in `apps/api`)
@@ -20,10 +20,10 @@ These are project decisions, not style preferences — deviating from them is a 
 
 - **Jest + React Testing Library only.** Don't introduce Vitest or any other runner, even though it's a common Jest alternative elsewhere — this project has already chosen Jest.
 - **TDD discipline**: failing test first, then the minimal implementation, then refactor. Don't write several tests and then several implementations in one pass "because it's faster" — that's deferred testing, not TDD.
-- **Always render via the shared wrapper**, never `render` straight from `@testing-library/react`, in any test that renders a Mantine component (most component tests in this app). Nothing has needed it yet on this greenfield project — the first time a test does, create `@/test-utils/render` (check it doesn't already exist first) and every later test reuses it unchanged (see §2).
+- **Always render via the shared wrapper** (`apps/web/test-utils/render.tsx`), never `render` straight from `@testing-library/react`, in any test that renders a Mantine component (most component tests in this app). Every component test reuses it unchanged (see §2).
 - **Never try to `render()` an `async` Server Component in Jest.** Unsupported combination, not a config mistake — see §4.
 - **Co-locate `*.test.ts(x)` next to the file it tests.** Only `test-utils/`, `__mocks__/`, and true cross-module integration tests get a dedicated folder (§7).
-- **Don't re-derive Prisma mocking/integration-DB setup here** — follow `expertise-postgres-prisma`'s testing guidance (mock Prisma for unit tests, real Postgres for integration tests covering the audit/domain-scope extensions).
+- **Don't re-derive database mocking/integration-DB setup here** — follow `expertise-postgres-drizzle`'s testing guidance (the `db-mock` helper for service unit tests, real Postgres for integration tests of constraints, migrations and any future audit trigger).
 
 ## 1. Jest configuration for this monorepo
 
@@ -66,13 +66,15 @@ describe("ContactsService", () => {
   });
 
   it("creates a contact", async () => {
-    // mock packages/db's prisma client (see expertise-postgres-prisma's Prisma-mocking guidance) — same
-    // mocking approach as any other Prisma-backed unit test, just invoked from a Nest testing module.
+    // mock packages/db's `db` with apps/api/src/test-utils/db-mock.ts (see expertise-postgres-drizzle's
+    // testing section): queue the rows the service will await, then assert on the real SQL it generated.
   });
 });
 ```
 
 For a full HTTP-level test of a controller (Pipes/Interceptors/Filters wired up), use `@nestjs/testing`'s `createNestApplication()` + `supertest` against the compiled module, rather than calling the controller class's methods directly — that's the only way to actually exercise the Pipe/Interceptor/Filter pipeline described in `expertise-api-rest`.
+
+**`apps/api` service tests use the shared `test-utils/db-mock.ts`** (real Drizzle SQL generation, mocked execution — mechanics in `expertise-postgres-drizzle` → Testing): `jest.mock("@contact-management/db", () => jest.requireActual("../test-utils/db-mock").mockedDbModule())`, `dbMock.reset()` in `beforeEach`, `dbMock.queue(...)` the results in the order the service awaits its statements, then assert on `dbMock.matching(/^update "Contact"/)[0].sql/.params`. Don't hand-roll a per-spec fake of `db`. `jest.config.js` loads `test-utils/set-env.ts` so the db package can be imported without a real `DATABASE_URL`. Specs of code that logs should silence `Logger.prototype` (`expertise-observability` → Testing).
 
 `jest.setup.ts` baseline:
 ```ts
@@ -100,7 +102,7 @@ class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
 window.ResizeObserver = ResizeObserver
 ```
 
-Shared render wrapper (the one the mandatory rule above requires). No component test exists yet on this greenfield project — create this file the first time one is needed (check it isn't already there before adding a duplicate), then treat it as the fixed shared pattern:
+Shared render wrapper (the one the mandatory rule above requires) — it already exists at `apps/web/test-utils/render.tsx`; extend that file rather than creating another, and treat this snippet as its reference shape:
 ```tsx
 // test-utils/render.tsx
 import { render as rtlRender } from '@testing-library/react'
@@ -146,7 +148,7 @@ it('submits the form when required fields are filled', async () => {
 
 Three-tier strategy instead:
 
-1. **Extract the logic, test it directly — no rendering.** Anything an async Server Component does before returning JSX (calling `apps/api` via `lib/api-client.ts`, shaping the response, computing derived fields) belongs in a plain exported function, unit-tested with ordinary Jest — mocking `lib/api-client.ts`'s fetch call, not Prisma (`apps/web` never touches Prisma at all, AD-1; the actual domain-scoping/permission logic this used to test lives in `apps/api`'s services now — see that app's own tests, `expertise-api-rest`):
+1. **Extract the logic, test it directly — no rendering.** Anything an async Server Component does before returning JSX (calling `apps/api` via `lib/api-client.ts`, shaping the response, computing derived fields) belongs in a plain exported function, unit-tested with ordinary Jest — mocking `lib/api-client.ts`'s fetch call, not the database (`apps/web` never touches `packages/db` at all, AD-1; the actual domain-scoping/permission logic this used to test lives in `apps/api`'s services now — see that app's own tests, `expertise-api-rest`):
    ```ts
    // app/(internal)/contacts/getContactsForList.ts
    export async function getContactsForList(searchParams: Record<string, string>) {
@@ -170,14 +172,16 @@ Three-tier strategy instead:
 
 ## 5. Stack-specific test patterns
 
-**Joi-validated forms** — test the schema and the form's error-rendering separately; they're different failure modes. Schema tests are pure and fast:
+**Zod-validated forms** — test the schema and the form's error-rendering separately; they're different failure modes. Schema tests are pure and fast:
 ```ts
 it('rejects an invalid email', () => {
-  const { error } = contactSchema.validate({ name: 'Rachel Cohen', email: 'not-an-email', phone: '0500000000' })
-  expect(error?.details[0].path).toEqual(['email'])
+  const result = contactSchema.safeParse({ name: 'Rachel Cohen', email: 'not-an-email', phone: '0500000000' })
+  expect(!result.success && result.error.issues[0]?.path).toEqual(['email'])
 })
 ```
-The component test only needs to prove the error path is wired up (one invalid case, one valid case, submit handler not called when invalid) — don't re-verify every Joi edge case at the component level; that's the schema test's job.
+Assert on `issue.path` (and `issue.message` for messages you wrote), never on Zod's built-in default wording. All user-visible messages must be Hebrew: `packages/shared-schemas/src/hebrew-messages.test.ts` enforces it for every request schema — add new schemas to its list. An array field such as `emails` can produce several issues under one top-level field, so dedupe field names before comparing.
+
+The component test only needs to prove the error path is wired up (one invalid case, one valid case, submit handler not called when invalid) — don't re-verify every Zod edge case at the component level; that's the schema test's job.
 
 **Redux Toolkit** — test a plain slice reducer as a pure function, no store needed. For RTK Query endpoints, build a fresh store per test (`configureStore`); don't share one store across tests, cache state leaks between them. The first time a test needs this, create one shared `setupApiStore` (or `setupStore`) helper in `test-utils/` — check it doesn't already exist before adding a second one — rather than re-deriving store shape per file, and mock the network layer (MSW or a mocked `baseQuery`) rather than hitting a real API.
 
@@ -187,9 +191,9 @@ The component test only needs to prove the error path is wired up (one invalid c
 
 Example: adding an optional `secondaryPhone` field. Red-green-refactor, bottom-up (validation → data → UI), one layer fully green before starting the next:
 
-1. **Red/Green — Joi schema**: failing test asserting `contactSchema` accepts a valid `secondaryPhone` / rejects a malformed one → add the field to the schema.
-2. **Red/Green — Prisma/data layer**: failing test asserting the repository function's returned/persisted record includes `secondaryPhone` → add the migration + column + mapping (migration mechanics: `expertise-postgres-prisma`).
-3. **Red/Green — form component**: failing RTL test asserting `ContactForm` shows the new input and surfaces the same validation message the schema encodes → wire up the input via `react-hook-form` + `@hookform/resolvers/joi`.
+1. **Red/Green — Zod schema**: failing test asserting `contactSchema` accepts a valid `secondaryPhone` / rejects a malformed one → add the field to the schema.
+2. **Red/Green — Drizzle/data layer**: failing service test asserting the generated SQL/DTO includes `secondaryPhone` → add the column to `schema/index.ts`, generate the migration, extend the service projection and DTO (migration mechanics: `expertise-postgres-drizzle`).
+3. **Red/Green — form component**: failing RTL test asserting `ContactForm` shows the new input and surfaces the same validation message the schema encodes → wire up the input via `react-hook-form` + `@hookform/resolvers/zod`.
 4. **Refactor**: with all three green, remove duplication (e.g. a phone-pattern regex defined twice), re-running all three test files after each change.
 
 Each layer's test must fail for the right reason before its implementation exists — don't write all three tests up front and then all three implementations.
@@ -207,7 +211,7 @@ lib/validation/contactSchema.test.ts
 Exceptions — dedicated folders:
 - `test-utils/` — shared render wrappers, store helpers, fixtures.
 - `__mocks__/` — Jest's manual-mock convention (e.g. `next/navigation`).
-- `integration/` or `e2e/` — cross-module flows that don't belong to one source file (e.g. the full registration-approval flow across API route + Prisma + notification).
+- `integration/` or `e2e/` — cross-module flows that don't belong to one source file (e.g. the full registration-approval flow across API route + database + notification).
 
 ## 8. Coverage: what's worth testing here
 
@@ -215,12 +219,14 @@ Don't chase a global coverage percentage — it rewards testing trivial code and
 
 **High priority — test thoroughly, including edge cases:**
 - **Permission / domain-scoping logic, in `apps/api`** (coordinator sees only their body's contacts, super-admin sees all, org-rep sees a restricted subset). The single highest-risk area in the app — a bug here leaks data across organizational boundaries. Test every role × boundary condition (empty scope, exactly one body, user with no assigned body), at the Guard/service level (§1C) — this logic doesn't exist in `apps/web` at all (AD-1).
+- **Privacy in logs and errors** — no personal data (names, ID numbers, phones, emails, search terms, bodies, query strings) in log output, and no driver/stack detail in a client response. Assert on both (see `logging.interceptor.spec.ts`, `common.spec.ts`); a leak here is a privacy incident, not a cosmetic bug.
 - **Soft-delete logic** (no real `DELETE`, only status → inactive). Test that inactive contacts are excluded from default list queries but still retrievable where required, and that reactivation works.
-- **Joi validation edge cases** for every user-facing form, especially the public registration form — empty strings vs. missing keys, boundary lengths, malformed email/phone, any field the public form exposes that the internal one doesn't.
+- **Zod validation edge cases** for every user-facing form, especially the public registration form — empty strings vs. missing keys, boundary lengths, malformed email/phone, any field the public form exposes that the internal one doesn't.
 - **Registration-request approval state machine**: every legal transition (pending→approved, pending→rejected) and every illegal one your code must block (double-approval, approving an already-rejected request).
 
 **Medium priority — main path only:**
-- `apps/api` controllers: one success case + one validation-failure case per endpoint is usually enough; don't re-test Joi edge cases already covered at the schema level.
+- `apps/api` controllers: one success case + one validation-failure case per endpoint is usually enough; don't re-test Zod edge cases already covered at the schema level.
+- Health probes: liveness never touches the database; readiness is `200` when the database answers and `503` (generic body, real error only in the log) when it doesn't or hangs (`health.service.spec.ts`).
 - Redux slices/RTK Query: the transformations/cache behavior your code adds, not RTK's own internals.
 
 **Low priority / skip:** trivial getters, pure prop pass-through components, framework glue that would only break if Next.js/React/Mantine itself broke. Don't use a snapshot test as a substitute for a real assertion.
@@ -244,4 +250,5 @@ A few things beyond `expertise-code-quality`'s universal principles are specific
 - [ ] No attempt to `render()` an async Server Component — its logic is extracted into a tested function instead.
 - [ ] The new test file is co-located correctly (or placed in `test-utils/`/`__mocks__/`/`integration/` if it genuinely belongs there).
 - [ ] Existing test patterns in the same area were checked and followed rather than reinvented.
+- [ ] If the code under test logs (a state change, a refusal, an error path), the test silences `Logger.prototype` and, where the log *is* the behavior or a privacy guarantee, asserts on it (message pattern; no personal data) — see `expertise-observability`.
 - [ ] The full test file(s) actually run and pass, with no stray `.only`/`.skip` left behind.

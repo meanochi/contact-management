@@ -1,8 +1,17 @@
 import { Controller, Get, Post, Patch, Body, Query, Param } from "@nestjs/common";
-import { JoiValidationPipe } from "../common/pipes/joi-validation.pipe";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe";
+import {
+  ApiErrorResponses,
+  ApiZodBody,
+  ApiZodListResponse,
+  ApiZodQuery,
+  ApiZodResponse,
+} from "../common/swagger/zod-openapi";
 import {
   createSupportedBodySchema,
   listSupportedBodiesQuerySchema,
+  supportedBodySchema,
   updateSupportedBodySchema,
 } from "@contact-management/shared-schemas/supported-bodies";
 import type {
@@ -12,12 +21,17 @@ import type {
 } from "@contact-management/shared-schemas/supported-bodies";
 import { SupportedBodiesService } from "./supported-bodies.service";
 
+@ApiTags("Supported bodies")
 @Controller("supported-bodies")
 export class SupportedBodiesController {
   constructor(private readonly supportedBodiesService: SupportedBodiesService) {}
 
   @Get()
-  async list(@Query(new JoiValidationPipe(listSupportedBodiesQuerySchema)) query: ListSupportedBodiesQuery) {
+  @ApiOperation({ summary: "List supported bodies, paginated" })
+  @ApiZodQuery(listSupportedBodiesQuerySchema)
+  @ApiZodListResponse(supportedBodySchema, "A page of supported bodies")
+  @ApiErrorResponses(400)
+  async list(@Query(new ZodValidationPipe(listSupportedBodiesQuerySchema)) query: ListSupportedBodiesQuery) {
     const result = await this.supportedBodiesService.list(query);
     // Shaped explicitly as {data, meta} here — ResponseInterceptor passes
     // through anything that already has a `data` key instead of re-wrapping it.
@@ -25,7 +39,11 @@ export class SupportedBodiesController {
   }
 
   @Post()
-  create(@Body(new JoiValidationPipe(createSupportedBodySchema)) body: CreateSupportedBodyInput) {
+  @ApiOperation({ summary: "Create a supported body (company id must be unique)" })
+  @ApiZodBody(createSupportedBodySchema)
+  @ApiZodResponse(201, supportedBodySchema, "The created supported body")
+  @ApiErrorResponses(400, 409)
+  create(@Body(new ZodValidationPipe(createSupportedBodySchema)) body: CreateSupportedBodyInput) {
     return this.supportedBodiesService.create(body);
   }
 
@@ -33,9 +51,13 @@ export class SupportedBodiesController {
   // sends { isActive: false }), same as the project's Contact
   // DELETE-via-PATCH rule (expertise-api-rest).
   @Patch(":id")
+  @ApiOperation({ summary: "Partially update a supported body; send { isActive: false } to deactivate" })
+  @ApiZodBody(updateSupportedBodySchema)
+  @ApiZodResponse(200, supportedBodySchema, "The updated supported body")
+  @ApiErrorResponses(400, 404, 409)
   update(
     @Param("id") id: string,
-    @Body(new JoiValidationPipe(updateSupportedBodySchema)) body: UpdateSupportedBodyInput,
+    @Body(new ZodValidationPipe(updateSupportedBodySchema)) body: UpdateSupportedBodyInput,
   ) {
     return this.supportedBodiesService.update(id, body);
   }

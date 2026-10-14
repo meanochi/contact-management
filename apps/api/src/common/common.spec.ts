@@ -1,13 +1,13 @@
 import { ArgumentsHost, BadRequestException, ConflictException, HttpException, Logger } from "@nestjs/common";
 import { lastValueFrom, of } from "rxjs";
-import Joi from "joi";
+import { z } from "zod";
 import { AllExceptionsFilter } from "./filters/all-exceptions.filter";
 import { ResponseInterceptor } from "./interceptors/response.interceptor";
-import { JoiValidationPipe } from "./pipes/joi-validation.pipe";
+import { ZodValidationPipe } from "./pipes/zod-validation.pipe";
 
-describe("JoiValidationPipe", () => {
-  const schema = Joi.object({ name: Joi.string().required(), age: Joi.number().required() });
-  const pipe = new JoiValidationPipe(schema);
+describe("ZodValidationPipe", () => {
+  const schema = z.object({ name: z.string(), age: z.number() });
+  const pipe = new ZodValidationPipe(schema);
 
   it("returns the validated value", () => {
     expect(pipe.transform({ name: "a", age: 3 })).toEqual({ name: "a", age: 3 });
@@ -64,6 +64,7 @@ describe("AllExceptionsFilter", () => {
 
   beforeEach(() => {
     jest.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -81,7 +82,7 @@ describe("AllExceptionsFilter", () => {
   it("falls back to INTERNAL_ERROR for an HttpException with a plain-string body", () => {
     const { status, json } = handle(new HttpException("boom", 418));
     expect(status).toHaveBeenCalledWith(418);
-    expect(json).toHaveBeenCalledWith({ error: { code: "INTERNAL_ERROR", message: "Something went wrong" } });
+    expect(json).toHaveBeenCalledWith({ error: { code: "INTERNAL_ERROR", message: "אירעה שגיאה בלתי צפויה — נסו שוב בעוד רגע" } });
   });
 
   it("returns a generic 500 and never leaks the raw error message or stack", () => {
@@ -90,16 +91,23 @@ describe("AllExceptionsFilter", () => {
     const body = JSON.stringify(json.mock.calls[0]![0]);
     expect(body).not.toContain("relation");
     expect(body).not.toContain("db.js");
-    expect(json.mock.calls[0]![0].error).toEqual({ code: "INTERNAL_ERROR", message: "Something went wrong" });
+    expect(json.mock.calls[0]![0].error).toEqual({ code: "INTERNAL_ERROR", message: "אירעה שגיאה בלתי צפויה — נסו שוב בעוד רגע" });
   });
 
-  it("logs the real error server-side for 500s only", () => {
+  it("logs the real error with its stack at error level for 500s only", () => {
     const spy = jest.spyOn(Logger.prototype, "error");
     handle(new Error("secret"));
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![1]).toContain("Error: secret");
 
     spy.mockClear();
     handle(new ConflictException({ code: "CONFLICT", message: "dup" }));
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("logs rejected client requests at warn level by code, without echoing the response body", () => {
+    const warn = jest.spyOn(Logger.prototype, "warn");
+    handle(new ConflictException({ code: "CONFLICT", message: "dup", details: { id: "private-value" } }));
+    expect(warn).toHaveBeenCalledWith("Request rejected with 409 CONFLICT");
   });
 });

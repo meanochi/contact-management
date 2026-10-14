@@ -111,9 +111,8 @@ const updateContactFields: Record<keyof UpdateContactInput, Joi.Schema> = {
   phone: phoneSchema.optional(),
   emails: Joi.array().items(Joi.string().trim().email()).min(1).optional(),
   // .allow('') — notes is the one field that's genuinely clearable; see
-  // createContactFields above and contacts.service.ts's blankToNull, per
-  // Rachel: "אני רוצה שגם בעדכון אוכל לעדכן את ההערות וזה ישמר" (clearing
-  // notes on edit must persist).
+  // createContactFields above and contacts.service.ts's blankToNull
+  // (clearing notes on edit must persist).
   notes: Joi.string().trim().max(2000).allow("").optional(),
   emailOptIn: Joi.boolean().optional(),
   smsOptIn: Joi.boolean().optional(),
@@ -130,7 +129,7 @@ const addSupportedBodyFields: Record<keyof AddSupportedBodyInput, Joi.Schema> = 
 export const addSupportedBodySchema = Joi.object(addSupportedBodyFields).required();
 
 // PATCH /contacts/:id/supported-bodies/:supportedBodyId — editing an
-// existing link's domain subset (requested by Rachel).
+// existing link's domain subset.
 const updateSupportedBodyDomainsFields: Record<keyof UpdateSupportedBodyDomainsInput, Joi.Schema> = {
   domainIds: domainIdsSchema,
 };

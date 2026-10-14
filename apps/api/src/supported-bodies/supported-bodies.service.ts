@@ -120,7 +120,7 @@ export class SupportedBodiesService {
             data: input.domainIds.map((domainId: string) => ({ supportedBodyId: id, domainId })),
           });
 
-          // Bug found by Rachel: ContactOnSupportedBodyDomain (a Contact's
+          // ContactOnSupportedBodyDomain (a Contact's
           // domain *subset* for this body — post-1.6 revision) is a separate
           // table with no FK/cascade back to SupportedBodyOnDomain. Removing
           // a domain here left every Contact's subset still referencing it —

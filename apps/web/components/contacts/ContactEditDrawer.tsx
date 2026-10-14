@@ -98,7 +98,7 @@ interface EditFormValues {
 }
 
 export function ContactEditDrawer({ contact, onClose }: { contact: ContactDto | null; onClose: () => void }) {
-  // Bug found by Rachel: fetching isActive-only here meant an *existing*
+  // Fetching isActive-only here meant an *existing*
   // link to a body that was later deactivated couldn't resolve a name at
   // all (the fallback showed the raw id). Fetch every body regardless of
   // status — "add another" below filters down to active-only itself, since

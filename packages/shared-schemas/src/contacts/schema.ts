@@ -113,8 +113,8 @@ export const addSupportedBodySchema = z.object({
 });
 
 // PATCH /contacts/:id/supported-bodies/:supportedBodyId — editing an
-// existing link's domain subset.
-export const updateSupportedBodyDomainsSchema = z.object({
+// existing link's domain subset (requested by Rachel).
+const updateSupportedBodyDomainsFields: Record<keyof UpdateSupportedBodyDomainsInput, Joi.Schema> = {
   domainIds: domainIdsSchema,
 });
 

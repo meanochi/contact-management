@@ -21,6 +21,7 @@ Before writing or reviewing code in this repo, load the relevant `expertise-*` s
 | `expertise-postgres-drizzle` | `packages/db` Drizzle schema, drizzle-kit migrations, Drizzle queries/transactions in services, audit trail status, soft delete, domain-scoped filtering. |
 | `expertise-observability` | Every operation you add or change in `apps/api` (endpoints, service methods, error paths, jobs, startup/shutdown): what to log and at which level, what must never be logged (personal data), OpenTelemetry (`apps/api/src/telemetry/**`), request logging, tracing/collector configuration. |
 | `expertise-react-nextjs` | `apps/web`: React/Next.js components, pages, Mantine (RTL), Redux Toolkit, React Hook Form + Zod, api-client layer. Presentation only, with no Route Handlers or database access. |
+| `expertise-diagrams` | Generating or refreshing the ERD and the Class Diagram (`docs/diagrams/`), and after any change to the Drizzle schema or to an `apps/api` module/controller/service. |
 | `expertise-testing` | Any test file or Jest config, TDD workflow, coverage priorities (Jest/RTL for web, `@nestjs/testing` for api). |
 
 Rules:

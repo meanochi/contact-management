@@ -1,6 +1,6 @@
 # ERD: מסד הנתונים
 
-נוצר מ-`packages/db/src/schema/index.ts` ב-2026-10-22. אין לערוך ידנית: מרעננים בעזרת הסקיל `expertise-diagrams`.
+נוצר מ-`packages/db/src/schema/index.ts` ב-2026-10-22. אין לערוך ידנית: מרעננים לפי הכללים ב-`expertise-postgres-drizzle`.
 
 ```mermaid
 erDiagram

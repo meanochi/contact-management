@@ -1,6 +1,6 @@
 ---
 name: expertise-api-rest
-description: 'REST API design conventions for the NestJS backend in this project (apps/api/src/**): URL and method design, action-endpoint decisions, Zod validation via a shared Pipe, the success/error response envelope via Interceptors/Filters, OpenAPI/Swagger generated from the Zod schemas, health/readiness probes, versioning, and rate limiting. Use when creating or reviewing any controller/service/module under apps/api, or discussing URL/method/status-code design for a CRUD or action endpoint, error/response envelope shape, Swagger documentation, health checks, API versioning, or rate limiting the public registration endpoint. Not for apps/web/React code (see expertise-react-nextjs), not for Drizzle query/transaction/soft-delete mechanics (see expertise-postgres-drizzle), and not for logging/tracing setup (see expertise-observability).'
+description: 'REST API design conventions for the NestJS backend in this project (apps/api/src/**): URL and method design, action-endpoint decisions, Zod validation via a shared Pipe, the success/error response envelope via Interceptors/Filters, OpenAPI/Swagger generated from the Zod schemas, health/readiness probes, versioning, rate limiting, and the Class Diagram (Mermaid diagram of the API's modules, controllers and services, kept in docs/diagrams/class-diagram.md). Use when creating or reviewing any controller/service/module under apps/api, when a class, public method or dependency is added, removed or renamed, or someone asks for a class diagram / architecture diagram of the API (it is regenerated from the code), or discussing URL/method/status-code design for a CRUD or action endpoint, error/response envelope shape, Swagger documentation, health checks, API versioning, or rate limiting the public registration endpoint. Not for apps/web/React code (see expertise-react-nextjs), not for Drizzle query/transaction/soft-delete mechanics (see expertise-postgres-drizzle), and not for logging/tracing setup (see expertise-observability).'
 ---
 
 # REST API Design Conventions (NestJS — `apps/api`)
@@ -204,6 +204,17 @@ export class RegistrationRequestsModule {}
 - Log meaningful business events in the service at `log` level (ids only — never names, ID numbers, phones, emails or free text) and refusals at `warn`; see `expertise-observability`.
 - Shape matches at least one sibling resource under `apps/api/src/`.
 
+## Class Diagram: `docs/diagrams/class-diagram.md` (regenerate when classes change)
+
+The Class Diagram answers "how is the backend built, who calls whom". It is **generated from `apps/api/src/**`, never invented and never edited by hand**; the code wins. Regenerate it in the same change that adds, removes or renames a module, controller, service or public method, or changes a dependency between them, and whenever someone asks for it. Editing a method body or a Zod schema does not need a refresh.
+
+- **Format:** Mermaid `classDiagram` in a fenced `mermaid` block, with the same header and "not expressed in the diagram" list as the ERD (`expertise-postgres-drizzle`). Names are exactly as in the code.
+- **Classes:** one per `@Controller` and per `@Injectable` service, per module, plus the cross-cutting classes registered globally in `main.ts` (`ResponseInterceptor`, `LoggingInterceptor`, `AllExceptionsFilter`) and `ZodValidationPipe`. Mark the role with a stereotype: `<<controller>>`, `<<service>>`, `<<module>>`, `<<pipe>>`. Use a `namespace` per resource module once there are more than two.
+- **Members:** only public methods of controllers and services (name and parameter names). Private helpers are left out.
+- **Relations** (the point of the diagram): `XModule --> XController` and `--> XService` ("registers"); `XController --> XService` ("calls"); every service `--> DrizzleDb` ("queries"), drawn once as `class DrizzleDb["DrizzleDb (packages/db)"]` with `<<package>>` (Mermaid stereotypes cannot hold a colon or slash); controllers `..> ZodValidationPipe` ("validates with"). The global interceptors and filter appear once, as a note, not as an arrow to every controller.
+- **The layer rule becomes visible:** only services reach `DrizzleDb`. An arrow from a controller to it is a violation, and a class that no module provides is a finding: draw it and report it.
+- Check the syntax before writing (every class in a relation is declared, blocks closed) and report in one or two lines what changed.
+
 ## Pre-completion checklist
 
 - [ ] URL, method and status code follow the rules above (action-endpoint decision test run for anything non-CRUD).
@@ -217,3 +228,4 @@ export class RegistrationRequestsModule {}
 - [ ] Module registered in `app.module.ts`.
 - [ ] Service logs the business event and refusals (no personal data); no duplicate request log added.
 - [ ] Tests: service spec (SQL/behaviour) and, for new validation rules, schema tests; HTTP-level controller spec for the pipe/interceptor/filter pipeline (`expertise-testing`).
+- [ ] If a module, controller, service, public method or dependency was added, removed or renamed, `docs/diagrams/class-diagram.md` was regenerated in the same change.

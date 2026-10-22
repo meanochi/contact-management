@@ -1,6 +1,6 @@
 # Class Diagram: ה-API
 
-נוצר מ-`apps/api/src` ב-2026-10-22. אין לערוך ידנית: מרעננים בעזרת הסקיל `expertise-diagrams`.
+נוצר מ-`apps/api/src` ב-2026-10-22. אין לערוך ידנית: מרעננים לפי הכללים ב-`expertise-api-rest`.
 
 ```mermaid
 classDiagram

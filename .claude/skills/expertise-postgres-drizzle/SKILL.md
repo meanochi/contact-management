@@ -1,6 +1,6 @@
 ---
 name: expertise-postgres-drizzle
-description: 'PostgreSQL/Drizzle ORM schema and query conventions for this project (packages/db): schema design for Domain/SupportedBody/Contact, drizzle-kit migrations, transactions, translating driver errors, soft delete, domain-scoped query filtering, and the status of the audit trail. Use when writing or reviewing packages/db/src/schema changes, migrations, Drizzle queries in an apps/api service, or soft-delete/domain-filtering/audit-trail work. Not for generic TypeScript/Node conventions (expertise-nodejs-typescript), API route/response shape (expertise-api-rest), or Jest setup (expertise-testing).'
+description: 'PostgreSQL/Drizzle ORM schema and query conventions for this project (packages/db): schema design for Domain/SupportedBody/Contact, drizzle-kit migrations, transactions, translating driver errors, soft delete, domain-scoped query filtering, the status of the audit trail, and the ERD (Mermaid entity-relationship diagram of the schema, kept in docs/diagrams/erd.md). Use when writing or reviewing packages/db/src/schema changes, migrations, Drizzle queries in an apps/api service, or soft-delete/domain-filtering/audit-trail work, and whenever the schema changes or someone asks for an ERD / entity-relationship diagram / database diagram: the ERD is regenerated from the schema. Not for generic TypeScript/Node conventions (expertise-nodejs-typescript), API route/response shape (expertise-api-rest), or Jest setup (expertise-testing).'
 ---
 
 # PostgreSQL + Drizzle Conventions for This Project
@@ -165,6 +165,19 @@ Mechanics and coverage priorities live in `expertise-testing`. What's specific h
 | `prisma db seed` | `tsx seed.ts` (`npm run db:seed -w @contact-management/db`) |
 | `prisma studio` | `drizzle-kit studio` |
 
+## ERD: `docs/diagrams/erd.md` (regenerate on every schema change)
+
+The ERD answers "how is the data stored". It is **generated from `packages/db/src/schema/index.ts`, never invented and never edited by hand**: if it disagrees with the schema, the schema wins and the diagram is regenerated. Regenerate it in the same change as any edit to the schema file, and whenever someone asks for an ERD.
+
+- **Format:** Mermaid `erDiagram` in a fenced `mermaid` block inside the Markdown file. The file starts with a short header (what it shows, source file, ISO generation date) and ends with a "not expressed in the diagram" list. Diagram text is in English, exactly as named in the code.
+- **Entities and attributes:** one entity per `pgTable`, named by its **database table name** (`Contact`, `SupportedBodyOnDomain`), one attribute per column by its **database column name** (`first_name`, not `firstName`). Format: `<type> <column> <keys> "<note>"`. Types: `text`, `boolean`, `timestamp`, `jsonb`, `text[]`, or the enum's name.
+- **Keys:** `PK`, `FK`, `UK`; several allowed (`PK, FK`). Mark every FK, composite ones included. A nullable column gets the note `"nullable"`.
+- **Relations** come from `references()` and `foreignKey()`, not from `relations()` blocks (a query convenience). A join table is always the "many" side (`||--o{`); a composite FK is one relation labelled `"composite FK"`. Tables with no relation (e.g. `AuditLog`) are still drawn.
+- **Enums** go in a Mermaid comment under the diagram (`%% ContactStatus: ACTIVE | INACTIVE`), since Mermaid has no enum entity.
+- **Not expressed in the diagram:** list the rules the schema cannot hold (e.g. "a contact's domains must be a subset of the body's domains, enforced in `ContactsService`", "Contact is soft-delete only"), taken from the schema comments and this skill.
+- **Check before writing:** every entity referenced by a relation is declared, no name contains a space, every block is closed. A diagram that does not render is worse than none. Then report in one or two lines what changed (tables or relations added, removed, altered).
+- A change that only edits a query, a service or a Zod schema does not need a refresh; a new table, column, key, enum value or relation does. Rendering note: GitHub renders Mermaid; VS Code needs the "Markdown Preview Mermaid Support" extension.
+
 ## Before you finish: verification checklist
 
 - [ ] No `db.delete(contacts)`; deactivation goes through the service's soft-delete path.
@@ -180,3 +193,4 @@ Mechanics and coverage priorities live in `expertise-testing`. What's specific h
 - [ ] New business-key/uniqueness invariants are enforced with a DB-level `unique()`/`primaryKey()`, not only in application code.
 - [ ] Schema change ships with the generated `drizzle/*.sql` + `meta/` in the same PR, and the SQL was read.
 - [ ] No new claim of "automatic audit logging" (see Audit trail).
+- [ ] If the schema file changed, `docs/diagrams/erd.md` was regenerated in the same change (every `pgTable` is an entity, every `references()`/`foreignKey()` a relation, names untouched).
